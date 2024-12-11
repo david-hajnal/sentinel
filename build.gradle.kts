@@ -22,16 +22,23 @@ repositories {
 
 dependencies {
     // JavaCV dependencies
-    implementation("org.bytedeco:javacv-platform:1.5.8")
+    implementation("org.bytedeco:javacv-platform:1.5.11")
 
     // OpenCV Java bindings (included in JavaCV)
-    implementation("org.bytedeco:opencv-platform:4.5.5-1.5.8")
+    implementation("org.bytedeco:opencv:4.10.0-1.5.11")
+    implementation("org.bytedeco:opencv-platform:4.10.0-1.5.11")
+    implementation("org.bytedeco:ffmpeg-platform:7.1-1.5.11")
 
     // (Optional) Logging support
     implementation("org.slf4j:slf4j-api:1.7.36")
     implementation("ch.qos.logback:logback-classic:1.2.11")
-    implementation("org.bytedeco:javacv-platform:1.5.8")
-    implementation("org.bytedeco:ffmpeg-platform:4.5.5-1.5.8")
+
+    compileOnly("org.projectlombok:lombok:1.18.36")
+    annotationProcessor("org.projectlombok:lombok:1.18.36")
+    testCompileOnly("org.projectlombok:lombok:1.18.36")
+    testImplementation("org.mockito:mockito-core:5.14.2")
+    testImplementation("org.junit.jupiter:junit-jupiter-api:5.11.3")
+    testImplementation("org.junit.jupiter:junit-jupiter-engine:5.11.3")
 
 }
 
@@ -41,4 +48,11 @@ tasks.withType<JavaCompile> {
 
 tasks.named<JavaExec>("run") {
     standardInput = System.`in`
+}
+
+tasks.test {
+    useJUnitPlatform() // Use JUnit 5 platform for running tests
+    testLogging {
+        events("passed", "skipped", "failed") // Log test events
+    }
 }

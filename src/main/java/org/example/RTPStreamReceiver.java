@@ -1,5 +1,7 @@
 package org.example;
 
+import java.nio.file.Files;
+import java.nio.file.Paths;
 import org.bytedeco.javacv.CanvasFrame;
 import org.bytedeco.javacv.FFmpegFrameGrabber;
 import org.bytedeco.javacv.Frame;
@@ -14,30 +16,42 @@ import java.util.TreeMap;
 import java.util.concurrent.DelayQueue;
 
 public class RTPStreamReceiver {
+
   private static final int BUFFER_SIZE = 1400; // MTU size
-  private static final int JITTER_BUFFER_DELAY_MS = 5;
+  private static final int JITTER_BUFFER_DELAY_MS = 00;
+  public static final int WIDTH = 640;
+  public static final int HEIGHT = 480;
+  public static final int FRAME_RATE = 1;
 
   private final int port;
   private final SortedMap<Integer, byte[]> frameBuffer = new TreeMap<>();
   private final DelayQueue<JitterBufferEntry> jitterBuffer = new DelayQueue<>();
+  private final CanvasFrame canvas;
   private boolean running;
+  private final SortedMap<Long, SortedMap<Integer, byte[]>> frameBufferByTimestamp = new TreeMap<>();
+  private final long maxWaitTimeMillis = 100; // Max wait time for missing packets
 
   public RTPStreamReceiver(int port) {
     this.port = port;
+    canvas = new CanvasFrame("RTP Playback");
+    canvas.setVisible(false);
   }
 
   public void start() {
     running = true;
-    new Thread(this::processJitterBuffer).start();
+    canvas.setVisible(true);
+    // new Thread(this::processJitterBuffer).start();
     new Thread(this::receivePackets).start();
   }
 
   public void stop() {
     running = false;
+    canvas.setVisible(false);
   }
 
   private void receivePackets() {
     try (DatagramSocket socket = new DatagramSocket(port)) {
+      socket.setReceiveBufferSize(65536);
       byte[] buffer = new byte[BUFFER_SIZE];
       DatagramPacket packet = new DatagramPacket(buffer, buffer.length);
 
@@ -45,82 +59,141 @@ public class RTPStreamReceiver {
         socket.receive(packet);
         byte[] packetData = new byte[packet.getLength()];
         System.arraycopy(packet.getData(), 0, packetData, 0, packet.getLength());
-        long currentTimestamp = System.currentTimeMillis();
-        jitterBuffer.offer(new JitterBufferEntry(packetData, currentTimestamp + JITTER_BUFFER_DELAY_MS));
+        RTPPacket rtpPacket = RTPPacket.fromBytes(packetData);
+
+        long timestamp = rtpPacket.getTimestamp();
+        int sequenceNumber = rtpPacket.getSequenceNumber();
+
+        // Add packet to the timestamp-based buffer
+        frameBufferByTimestamp.computeIfAbsent(timestamp, k -> new TreeMap<>())
+            .put(sequenceNumber, rtpPacket.getPayload());
+
+        System.out.println(
+            "Buffered RTP packet: Timestamp=" + timestamp + ", SequenceNumber=" + sequenceNumber);
+
+        // Trigger reassembly if marker packet is received
+        if (rtpPacket.isMarker()) {
+          processFrameBuffer(timestamp);
+        }
       }
     } catch (Exception e) {
       e.printStackTrace();
     }
   }
 
-  private void processJitterBuffer() {
-    CanvasFrame canvas = new CanvasFrame("RTP Video Stream");
-    OpenCVFrameConverter.ToMat converter = new OpenCVFrameConverter.ToMat();
-    final int[] lastProcessedSequenceNumber = {-1};
-    while (running) {
-      try {
-        JitterBufferEntry entry = jitterBuffer.take();
-        RTPPacket rtpPacket = RTPPacket.fromBytes(entry.getData());
-        int sequenceNumber = rtpPacket.getSequenceNumber();
-        boolean isLastFragment = rtpPacket.isMarker();
-        byte[] payload = rtpPacket.getPayload();
+  private void processFrameBuffer(long timestamp) {
+    SortedMap<Integer, byte[]> packets = frameBufferByTimestamp.get(timestamp);
+    if (packets == null) {
+      return;
+    }
 
-        frameBuffer.put(sequenceNumber, payload);
-
-        if (isLastFragment) {
-          byte[] completeFrame = reassembleFrame(frameBuffer, lastProcessedSequenceNumber[0] + 1, sequenceNumber,
-              1400);
-          if (completeFrame != null) {
-            lastProcessedSequenceNumber[0] = sequenceNumber;
-            Mat decodedFrame = decodeFrame(completeFrame, 1920, 1080); // Example resolution
-            if (decodedFrame != null) {
-              Frame displayFrame = converter.convert(decodedFrame);
-              canvas.showImage(displayFrame);
-            }
-          }
-        }
-      } catch (Exception e) {
-        e.printStackTrace();
+    // Check if the frame is complete
+    int firstSeq = packets.firstKey();
+    int lastSeq = packets.lastKey();
+    for (int seq = firstSeq; seq <= lastSeq; seq++) {
+      if (!packets.containsKey(seq)) {
+        System.out.println("Missing packet: SequenceNumber=" + seq + " for Timestamp=" + timestamp);
+        // Wait for a short period to see if missing packets arrive
+        waitForMissingPackets(timestamp);
+        return;
       }
+    }
+
+    // Reassemble frame
+    byte[] frameData = reassembleFrame(packets);
+    if (frameData != null) {
+      decodeAndDisplayFrame(frameData);
+      frameBufferByTimestamp.remove(timestamp); // Remove processed frame
     }
   }
 
-  private static byte[] reassembleFrame(SortedMap<Integer, byte[]> buffer, int start, int end, int frameSize) {
-    int totalLength = 0;
+  private void waitForMissingPackets(long timestamp) {
+    long startTime = System.currentTimeMillis();
+    while ((System.currentTimeMillis() - startTime) < maxWaitTimeMillis) {
+      SortedMap<Integer, byte[]> packets = frameBufferByTimestamp.get(timestamp);
+      int firstSeq = packets.firstKey();
+      int lastSeq = packets.lastKey();
+      boolean allPacketsReceived = true;
 
-    for (int seq = start; seq <= end; seq++) {
-      totalLength += buffer.containsKey(seq) ? buffer.get(seq).length : frameSize;
+      for (int seq = firstSeq; seq <= lastSeq; seq++) {
+        if (!packets.containsKey(seq)) {
+          allPacketsReceived = false;
+          break;
+        }
+      }
+
+      if (allPacketsReceived) {
+        processFrameBuffer(timestamp);
+        return;
+      }
+
+      try {
+        Thread.sleep(1); // Allow time for packets to arrive
+      } catch (InterruptedException e) {
+        Thread.currentThread().interrupt();
+      }
     }
 
+    System.out.println("Frame incomplete. Dropping Timestamp=" + timestamp);
+    frameBufferByTimestamp.remove(timestamp);
+  }
+
+  private void decodeAndDisplayFrame(byte[] frameData) {
+
+    try (FFmpegFrameGrabber grabber = new FFmpegFrameGrabber(new ByteArrayInputStream(frameData))) {
+      grabber.setFrameRate(FRAME_RATE);
+      grabber.setImageWidth(WIDTH);
+      grabber.setImageHeight(HEIGHT);
+      grabber.setPixelFormat(org.bytedeco.ffmpeg.global.avutil.AV_PIX_FMT_YUV420P); // Pixel format
+      grabber.start();
+      Frame frame = grabber.grabImage();
+      if (frame != null) {
+        canvas.showImage(frame);
+      }else {
+        System.out.println("Frame is null");
+      }
+      grabber.stop();
+    } catch (Exception e) {
+      e.printStackTrace();
+    }
+  }
+
+  private byte[] reassembleFrame(SortedMap<Integer, byte[]> packets) {
+    int totalLength = packets.values().stream().mapToInt(p -> p.length).sum();
     byte[] completeFrame = new byte[totalLength];
     int offset = 0;
 
-    for (int seq = start; seq <= end; seq++) {
-      if (buffer.containsKey(seq)) {
-        byte[] fragment = buffer.get(seq);
-        System.arraycopy(fragment, 0, completeFrame, offset, fragment.length);
-        offset += fragment.length;
-      } else {
-        byte[] blackImage = createBlackImagePlaceholder(frameSize);
-        System.arraycopy(blackImage, 0, completeFrame, offset, blackImage.length);
-        offset += blackImage.length;
-      }
+    for (byte[] payload : packets.values()) {
+      System.arraycopy(payload, 0, completeFrame, offset, payload.length);
+      offset += payload.length;
     }
 
+    System.out.println("Reassembled frame size: " + completeFrame.length);
     return completeFrame;
   }
 
-  private static byte[] createBlackImagePlaceholder(int frameSize) {
-    byte[] blackImage = new byte[frameSize];
-    for (int i = 0; i < frameSize; i++) {
-      blackImage[i] = 0;
+  private static byte[] generatePlaceholderData(int size) {
+    // Create a placeholder NAL unit for padding (e.g., Filler Data NAL Unit)
+    byte[] placeholder = new byte[size];
+    placeholder[0] = 0x00; // Start code prefix (NAL unit start)
+    placeholder[1] = 0x00;
+    placeholder[2] = 0x01;
+    placeholder[3] = 0x0C; // Filler Data NAL Unit type (12 for H.264)
+    // Fill the rest with zeros or neutral padding bytes
+    for (int i = 4; i < size; i++) {
+      placeholder[i] = (byte) 0xFF; // Padding data
     }
-    return blackImage;
+    return placeholder;
   }
+
 
   private Mat decodeFrame(byte[] frameData, int width, int height) {
     try (FFmpegFrameGrabber grabber = new FFmpegFrameGrabber(new ByteArrayInputStream(frameData))) {
       grabber.start();
+      grabber.setImageWidth(width);
+      grabber.setImageHeight(height);
+      grabber.setPixelFormat(org.bytedeco.ffmpeg.global.avutil.AV_PIX_FMT_YUV420P);
+      grabber.setFrameRate(FRAME_RATE);
       Frame frame = grabber.grabImage();
       grabber.stop();
       return new OpenCVFrameConverter.ToMat().convert(frame);
