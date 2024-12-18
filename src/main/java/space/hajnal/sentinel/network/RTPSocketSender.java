@@ -1,23 +1,28 @@
 package space.hajnal.sentinel.network;
 
+import java.io.IOException;
 import java.net.DatagramPacket;
 import java.net.DatagramSocket;
 import java.net.InetAddress;
+import java.util.List;
 import lombok.extern.slf4j.Slf4j;
 import org.bytedeco.javacv.Frame;
 import org.example.RTPPacket;
 import space.hajnal.sentinel.codec.H264Encoder;
 
 @Slf4j
-public class RTPSocket implements AutoCloseable {
+public class RTPSocketSender implements AutoCloseable {
 
   private final ServerOptions serverOptions;
   private final H264Encoder h264Encoder;
+  private final RTPPacketSerializer rtpPacketSerializer;
   private DatagramSocket socket;
 
-  public RTPSocket(ServerOptions serverOptions, H264Encoder h264Encoder) {
+  public RTPSocketSender(ServerOptions serverOptions, H264Encoder h264Encoder,
+      RTPPacketSerializer rtpPacketSerializer) {
     this.serverOptions = serverOptions;
     this.h264Encoder = h264Encoder;
+    this.rtpPacketSerializer = rtpPacketSerializer;
   }
 
   public void open(DatagramSocket socket) {
@@ -44,28 +49,25 @@ public class RTPSocket implements AutoCloseable {
     }
 
     try {
-      int sequenceNumber = 0;
       int ssrc = 123456;
-
       byte[] frameData = h264Encoder.encode(frame);
-
       int mtu = serverOptions.getMtu();
-      for (int offset = 0; offset < frameData.length; offset += mtu) {
-        int payloadSize = Math.min(mtu, frameData.length - offset);
-        byte[] payload = new byte[payloadSize];
-        System.arraycopy(frameData, offset, payload, 0, payloadSize);
+      List<RTPPacket> rtpPackets = rtpPacketSerializer.serialize(frameData, mtu, timestamp, ssrc);
 
-        boolean marker = (offset + payloadSize == frameData.length);
-        RTPPacket rtpPacket = new RTPPacket(96, sequenceNumber++, timestamp, ssrc, payload,
-            marker);
-
-        socket.send(new DatagramPacket(rtpPacket.toBytes(), rtpPacket.toBytes().length,
-            InetAddress.getByName(serverOptions.getServerAddress()),
-            serverOptions.getServerPort()));
-      }
+      rtpPackets.forEach(this::send);
 
     } catch (Exception e) {
       log.error("Failed to send frame", e);
+    }
+  }
+
+  private void send(RTPPacket rtpPacket) {
+    try {
+      socket.send(new DatagramPacket(rtpPacket.toBytes(), rtpPacket.toBytes().length,
+          InetAddress.getByName(serverOptions.getServerAddress()),
+          serverOptions.getServerPort()));
+    } catch (IOException e) {
+      log.error("Failed to send RTP packet", e);
     }
   }
 

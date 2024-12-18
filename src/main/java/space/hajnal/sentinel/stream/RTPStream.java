@@ -11,7 +11,8 @@ import space.hajnal.sentinel.camera.FrameGrabberFactory;
 import space.hajnal.sentinel.camera.SentinelFrameGrabber;
 import space.hajnal.sentinel.camera.SentinelFrameGrabberOptions;
 import space.hajnal.sentinel.codec.H264Encoder;
-import space.hajnal.sentinel.network.RTPSocket;
+import space.hajnal.sentinel.network.RTPPacketSerializer;
+import space.hajnal.sentinel.network.RTPSocketSender;
 import space.hajnal.sentinel.network.ServerOptions;
 
 public class RTPStream {
@@ -42,16 +43,19 @@ public class RTPStream {
 
     H264Encoder encoder = new H264Encoder(grabberOptions);
 
+    RTPPacketSerializer rtpPacketSerializer = new RTPPacketSerializer();
+
     try (SentinelFrameGrabber grabber = new SentinelFrameGrabber(grabberOptions,
-        frameGrabberFactory); RTPSocket rtpSocket = new RTPSocket(serverOptions, encoder)) {
-      rtpSocket.open(new DatagramSocket());
+        frameGrabberFactory); RTPSocketSender rtpSocketSender = new RTPSocketSender(serverOptions, encoder,
+        rtpPacketSerializer)) {
+      rtpSocketSender.open(new DatagramSocket());
 
       CanvasFrame canvas = new CanvasFrame("RTP Sender Display");
       canvas.setDefaultCloseOperation(CanvasFrame.EXIT_ON_CLOSE);
 
       grabber.capture((Function<Frame, Void>) frame -> {
         long timestamp = System.currentTimeMillis();
-        rtpSocket.send(frame, timestamp);
+        rtpSocketSender.send(frame, timestamp);
         canvas.showImage(frame);
         return null;
       });
