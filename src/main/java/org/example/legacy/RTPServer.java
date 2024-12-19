@@ -14,7 +14,7 @@ import org.bytedeco.javacv.FFmpegFrameGrabber;
 import org.bytedeco.javacv.Frame;
 import org.bytedeco.javacv.OpenCVFrameConverter;
 import org.bytedeco.opencv.opencv_core.Mat;
-import org.example.RTPPacket;
+import space.hajnal.sentinel.network.model.RTPPacket;
 
 public class RTPServer {
 

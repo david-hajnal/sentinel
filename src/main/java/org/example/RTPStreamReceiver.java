@@ -1,7 +1,5 @@
 package org.example;
 
-import java.nio.file.Files;
-import java.nio.file.Paths;
 import org.bytedeco.javacv.CanvasFrame;
 import org.bytedeco.javacv.FFmpegFrameGrabber;
 import org.bytedeco.javacv.Frame;
@@ -14,7 +12,9 @@ import java.net.DatagramSocket;
 import java.util.SortedMap;
 import java.util.TreeMap;
 import java.util.concurrent.DelayQueue;
+import space.hajnal.sentinel.network.model.RTPPacket;
 
+@Deprecated
 public class RTPStreamReceiver {
 
   private static final int BUFFER_SIZE = 1400; // MTU size

@@ -3,34 +3,32 @@ package space.hajnal.sentinel.network.receiver;
 import java.io.IOException;
 import java.net.DatagramPacket;
 import java.net.DatagramSocket;
-import java.util.concurrent.BlockingQueue;
-import java.util.concurrent.LinkedBlockingQueue;
+import java.util.concurrent.DelayQueue;
 import lombok.extern.slf4j.Slf4j;
-import org.example.RTPPacket;
-import space.hajnal.sentinel.network.RTPPacketDeserializer;
-import space.hajnal.sentinel.network.ServerOptions;
+import space.hajnal.sentinel.network.model.DelayedRTPPacket;
+import space.hajnal.sentinel.network.model.RTPPacket;
+import space.hajnal.sentinel.network.model.ServerOptions;
+import space.hajnal.sentinel.network.serialization.RTPPacketDeserializer;
 
 @Slf4j
 public class PacketReceiver implements AutoCloseable {
 
   private final DatagramSocket socket;
-  private final BlockingQueue<RTPPacket> packetQueue;
+  private final DelayQueue<DelayedRTPPacket> packetQueue;
   private volatile boolean running = true;
   private final ServerOptions serverOptions;
   private final RTPPacketDeserializer rtpPacketDeserializer;
+  private final long packetTtlMillis;
 
-  public PacketReceiver(DatagramSocket socket, int queueCapacity, ServerOptions serverOptions,
-      RTPPacketDeserializer rtpPacketDeserializer) {
+  public PacketReceiver(DatagramSocket socket, ServerOptions serverOptions,
+      RTPPacketDeserializer rtpPacketDeserializer, long packetTtlMillis) {
     this.socket = socket;
-    this.packetQueue = new LinkedBlockingQueue<>(queueCapacity);
+    this.packetQueue = new DelayQueue<>();
     this.serverOptions = serverOptions;
     this.rtpPacketDeserializer = rtpPacketDeserializer;
+    this.packetTtlMillis = packetTtlMillis;
   }
 
-  /**
-   * Starts receiving packets from the network and puts them into the packet queue.
-   * Blocks until the receiver is closed.
-   */
   public void startReceiving() {
     while (running) {
       try {
@@ -52,18 +50,13 @@ public class PacketReceiver implements AutoCloseable {
   }
 
   void putPacket(RTPPacket rtpPacket) throws InterruptedException {
-    packetQueue.put(rtpPacket);
+    DelayedRTPPacket delayedPacket = new DelayedRTPPacket(rtpPacket, packetTtlMillis);
+    packetQueue.put(delayedPacket);
   }
 
-  /**
-   * Retrieves the next packet from the queue.
-   * Blocks until a packet is available.
-   *
-   * @return The next packet
-   * @throws InterruptedException If the thread is interrupted while waiting
-   */
   public RTPPacket retrievePacket() throws InterruptedException {
-    return packetQueue.take();
+    DelayedRTPPacket delayedPacket = packetQueue.take(); // Blocks until an unexpired packet is available
+    return delayedPacket.getPacket();
   }
 
   @Override

@@ -3,7 +3,6 @@ package space.hajnal.sentinel.camera;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
-import java.util.function.Function;
 import lombok.extern.slf4j.Slf4j;
 import org.bytedeco.javacv.Frame;
 import org.bytedeco.javacv.FrameGrabber;
@@ -31,7 +30,7 @@ public class SentinelFrameGrabber implements AutoCloseable {
     this.frameGrabberFactory = frameGrabberFactory;
   }
 
-  public <T> void capture(Function<Frame, T> fn) {
+  public void capture(FrameGrabberCallback fn) {
 
     if (fn == null) {
       throw new IllegalArgumentException("Function cannot be null");
@@ -49,7 +48,6 @@ public class SentinelFrameGrabber implements AutoCloseable {
 
       scheduler.scheduleAtFixedRate(() -> {
         if (!running) {
-          scheduler.shutdown();
           return;
         }
 
@@ -57,18 +55,18 @@ public class SentinelFrameGrabber implements AutoCloseable {
           Frame frame = grabber.grab();
           if (frame == null) {
             log.info("No more frames to grab.");
-            scheduler.shutdown();
           } else {
-            fn.apply(frame);
+            fn.onFrameGrabbed(frame);
           }
         } catch (Exception e) {
           log.error("Error while capturing frames", e);
-          scheduler.shutdown();
         }
-      }, 0, frameDurationMillis, TimeUnit.MILLISECONDS);
+      }, 100, frameDurationMillis, TimeUnit.MILLISECONDS);
 
     } catch (Exception e) {
       log.error("Error initializing frame grabber", e);
+      running = false;
+      scheduler.shutdown();
     }
   }
 

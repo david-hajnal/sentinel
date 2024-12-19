@@ -4,15 +4,16 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.any;
 import static org.mockito.Mockito.anyInt;
+import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
-import java.util.function.Function;
 import org.bytedeco.javacv.Frame;
 import org.bytedeco.javacv.FrameGrabber;
 import org.junit.jupiter.api.AfterEach;
@@ -57,45 +58,30 @@ class SentinelFrameGrabberTest {
   }
 
   @Test
-  void testCaptureFunctionIsCalledWithFrame() throws Exception {
+  void testCaptureFunctionIsCalledWithFrame() throws InterruptedException {
     // Arrange
-    Function<Frame, Void> frameProcessor = mock(Function.class);
-
+    CountDownLatch latch = new CountDownLatch(1);
+    FrameGrabberCallback frameProcessor = mock(FrameGrabberCallback.class);
+    when(frameProcessor.onFrameGrabbed(any(Frame.class))).thenAnswer(invocation -> {
+      latch.countDown();
+      return null;
+    });
     // Act
     frameGrabberInstance.capture(frameProcessor);
-
-    // Wait for the scheduled tasks to run
-    Thread.sleep(200); // Allow time for the scheduler to execute
-
-    // Assert
-    verify(frameProcessor, times(1)).apply(any(Frame.class)); // Ensure the frame processor was called once
-  }
-
-  @Test
-  void testSchedulerStopsAfterNullFrame() throws Exception {
-    // Arrange
-    Function<Frame, Void> frameProcessor = mock(Function.class);
-
-    // Act
-    frameGrabberInstance.capture(frameProcessor);
-
-    // Wait for the scheduled tasks to run
-    Thread.sleep(500); // Allow time for the scheduler to execute
+    assertTrue(latch.await(1, java.util.concurrent.TimeUnit.SECONDS),
+        "Latch should have counted down after frame processing.");
 
     // Assert
-    assertTrue(scheduler.isShutdown(), "Scheduler should have been shut down after grabbing null frame.");
+    verify(frameProcessor, times(1)).onFrameGrabbed(any(Frame.class));
   }
 
   @Test
   void testGrabberIsConfiguredCorrectly() throws Exception {
     // Arrange
-    Function<Frame, Void> frameProcessor = mock(Function.class);
+    FrameGrabberCallback frameProcessor = mock(FrameGrabberCallback.class);
 
     // Act
     frameGrabberInstance.capture(frameProcessor);
-
-    // Wait for the scheduled tasks to run
-    Thread.sleep(200); // Allow time for the scheduler to execute
 
     // Assert
     verify(frameGrabber).setImageWidth(640);
@@ -114,20 +100,5 @@ class SentinelFrameGrabberTest {
     assertTrue(scheduler.isShutdown(), "Scheduler should be shut down after closing.");
   }
 
-  @Test
-  void testErrorDuringFrameProcessingDoesNotCrashScheduler() throws Exception {
-    // Arrange
-    Function<Frame, Void> frameProcessor = mock(Function.class);
-    doThrow(new RuntimeException("Simulated error")).when(frameProcessor).apply(any(Frame.class));
-
-    // Act
-    frameGrabberInstance.capture(frameProcessor);
-
-    // Wait for the scheduled tasks to run
-    Thread.sleep(200); // Allow time for the scheduler to execute
-
-    // Assert
-    assertTrue(scheduler.isShutdown(), "Scheduler should have shut down after processing error.");
-  }
 
 }

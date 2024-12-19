@@ -3,7 +3,6 @@ package org.example;
 import java.io.ByteArrayOutputStream;
 import org.bytedeco.javacv.CanvasFrame;
 import org.bytedeco.javacv.FFmpegFrameRecorder;
-import org.bytedeco.javacv.OpenCVFrameConverter;
 import org.bytedeco.javacv.OpenCVFrameConverter.ToMat;
 import org.bytedeco.javacv.OpenCVFrameGrabber;
 import org.bytedeco.javacv.Frame;
@@ -13,7 +12,9 @@ import java.net.DatagramSocket;
 import java.net.InetAddress;
 import org.bytedeco.opencv.global.opencv_imgcodecs;
 import org.bytedeco.opencv.opencv_core.Mat;
+import space.hajnal.sentinel.network.model.RTPPacket;
 
+@Deprecated
 public class RTPStreamSender {
 
   public static final int FRAME_RATE = 30;

@@ -1,7 +1,7 @@
-package space.hajnal.sentinel.network;
+package space.hajnal.sentinel.network.serialization;
 
 import java.net.DatagramPacket;
-import org.example.RTPPacket;
+import space.hajnal.sentinel.network.model.RTPPacket;
 
 public class RTPPacketDeserializer {
 

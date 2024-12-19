@@ -1,4 +1,4 @@
-package space.hajnal.sentinel.network;
+package space.hajnal.sentinel.network.sender;
 
 import java.io.IOException;
 import java.net.DatagramPacket;
@@ -7,8 +7,10 @@ import java.net.InetAddress;
 import java.util.List;
 import lombok.extern.slf4j.Slf4j;
 import org.bytedeco.javacv.Frame;
-import org.example.RTPPacket;
+import space.hajnal.sentinel.network.model.RTPPacket;
 import space.hajnal.sentinel.codec.H264Encoder;
+import space.hajnal.sentinel.network.model.ServerOptions;
+import space.hajnal.sentinel.network.serialization.RTPPacketSerializer;
 
 @Slf4j
 public class RTPSocketSender implements AutoCloseable {

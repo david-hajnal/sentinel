@@ -1,4 +1,4 @@
-package space.hajnal.sentinel.network;
+package space.hajnal.sentinel.network.model;
 
 import lombok.Builder;
 import lombok.Data;

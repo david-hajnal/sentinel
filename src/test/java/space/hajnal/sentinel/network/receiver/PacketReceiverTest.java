@@ -8,10 +8,10 @@ import java.net.DatagramPacket;
 import java.net.DatagramSocket;
 import java.util.concurrent.*;
 
-import org.example.RTPPacket;
+import space.hajnal.sentinel.network.model.RTPPacket;
 import org.junit.jupiter.api.*;
-import space.hajnal.sentinel.network.RTPPacketDeserializer;
-import space.hajnal.sentinel.network.ServerOptions;
+import space.hajnal.sentinel.network.serialization.RTPPacketDeserializer;
+import space.hajnal.sentinel.network.model.ServerOptions;
 
 class PacketReceiverTest {
 
@@ -29,7 +29,7 @@ class PacketReceiverTest {
     threadPool = Executors.newFixedThreadPool(2);
 
     rtpPacketDeserializer = mock(RTPPacketDeserializer.class);
-    packetReceiver = new PacketReceiver(mockSocket, 10, serverOptions, rtpPacketDeserializer);
+    packetReceiver = new PacketReceiver(mockSocket, serverOptions, rtpPacketDeserializer, 1000);
   }
 
   @AfterEach

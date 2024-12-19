@@ -6,7 +6,7 @@ import java.util.SortedMap;
 import java.util.TreeMap;
 import java.util.concurrent.CopyOnWriteArrayList;
 import lombok.extern.slf4j.Slf4j;
-import org.example.RTPPacket;
+import space.hajnal.sentinel.network.model.RTPPacket;
 
 @Slf4j
 public class FrameProcessor {
@@ -29,7 +29,11 @@ public class FrameProcessor {
     }
   }
 
-  private byte[] reassembleFrame(SortedMap<Integer, byte[]> packets) {
+  SortedMap<Integer, byte[]> getFramesByTimestamp(long timestamp) {
+    return frameBufferByTimestamp.get(timestamp);
+  }
+
+  byte[] reassembleFrame(SortedMap<Integer, byte[]> packets) {
     int totalLength = packets.values().stream().mapToInt(p -> p.length).sum();
     byte[] completeFrame = new byte[totalLength];
     int offset = 0;
@@ -46,7 +50,7 @@ public class FrameProcessor {
     subscribers.add(listener);
   }
 
-  private void notifySubscribers(byte[] frame) {
+  void notifySubscribers(byte[] frame) {
     for (FrameListener listener : subscribers) {
       listener.onFrameAvailable(frame);
     }

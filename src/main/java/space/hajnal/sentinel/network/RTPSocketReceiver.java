@@ -6,10 +6,13 @@ import java.net.DatagramSocket;
 import java.util.SortedMap;
 import java.util.TreeMap;
 import lombok.extern.slf4j.Slf4j;
-import org.example.RTPPacket;
+import space.hajnal.sentinel.network.model.RTPPacket;
 import space.hajnal.sentinel.codec.H264Encoder;
+import space.hajnal.sentinel.network.model.ServerOptions;
+import space.hajnal.sentinel.network.serialization.RTPPacketDeserializer;
 
 @Slf4j
+@Deprecated
 public class RTPSocketReceiver implements AutoCloseable {
 
   private final ServerOptions serverOptions;

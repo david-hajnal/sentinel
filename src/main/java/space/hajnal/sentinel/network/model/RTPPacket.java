@@ -1,4 +1,4 @@
-package org.example;
+package space.hajnal.sentinel.network.model;
 
 import java.nio.ByteBuffer;
 

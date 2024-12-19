@@ -1,10 +1,11 @@
 package space.hajnal.sentinel.network;
 
-import org.example.RTPPacket;
+import space.hajnal.sentinel.network.model.RTPPacket;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
+import space.hajnal.sentinel.network.serialization.RTPPacketSerializer;
 
 import static org.junit.jupiter.api.Assertions.*;
 

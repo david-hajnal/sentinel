@@ -8,7 +8,7 @@ import org.bytedeco.javacv.Frame;
 import java.net.DatagramPacket;
 import java.net.DatagramSocket;
 import java.net.InetAddress;
-import org.example.RTPPacket;
+import space.hajnal.sentinel.network.model.RTPPacket;
 
 public class RTPClient {
 

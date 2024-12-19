@@ -18,11 +18,14 @@ import java.net.DatagramPacket;
 import java.net.DatagramSocket;
 import java.util.List;
 import org.bytedeco.javacv.Frame;
-import org.example.RTPPacket;
+import space.hajnal.sentinel.network.model.RTPPacket;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 import space.hajnal.sentinel.codec.H264Encoder;
+import space.hajnal.sentinel.network.model.ServerOptions;
+import space.hajnal.sentinel.network.sender.RTPSocketSender;
+import space.hajnal.sentinel.network.serialization.RTPPacketSerializer;
 
 class RTPSocketSenderTest {
 

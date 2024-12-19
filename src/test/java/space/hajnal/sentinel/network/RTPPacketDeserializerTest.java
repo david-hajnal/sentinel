@@ -7,8 +7,9 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.net.DatagramPacket;
-import org.example.RTPPacket;
+import space.hajnal.sentinel.network.model.RTPPacket;
 import org.junit.jupiter.api.Test;
+import space.hajnal.sentinel.network.serialization.RTPPacketDeserializer;
 
 class RTPPacketDeserializerTest {
 
