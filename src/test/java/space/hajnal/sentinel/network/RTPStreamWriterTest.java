@@ -1,5 +1,6 @@
 package space.hajnal.sentinel.network;
 
+import java.net.DatagramSocket;
 import java.util.concurrent.CountDownLatch;
 import org.bytedeco.javacv.Frame;
 import org.bytedeco.javacv.FrameGrabber;
@@ -40,9 +41,10 @@ class RTPStreamWriterTest {
   }
 
   @Test
-  void testStart_CapturesAndSendsFrames() throws InterruptedException {
+  void testStart_CapturesAndSendsFrames() throws Exception {
     // Arrange: Simulate a frame capture callback
     Frame frame = mock(Frame.class);
+    DatagramSocket mockSocket = mock(DatagramSocket.class);
     CountDownLatch latch = new CountDownLatch(1);
     doAnswer(_ -> {
       mockSender.send(frame, 1L);
@@ -51,7 +53,7 @@ class RTPStreamWriterTest {
     }).when(mockFrameGrabber).capture(any());
 
     // Act
-    rtpStreamWriter.start();
+    rtpStreamWriter.start(mockSocket);
     assertTrue(latch.await(1, TimeUnit.SECONDS), "Frame capture callback was not invoked");
 
     // Assert: Verify that frames are sent
@@ -63,9 +65,10 @@ class RTPStreamWriterTest {
   void testStart_HandleFrameGrabberException() throws Exception {
     // Arrange: Simulate an exception during frame grabbing
     doThrow(new RuntimeException("Frame grabber exception")).when(mockFrameGrabber).capture(any());
+    DatagramSocket mockSocket = mock(DatagramSocket.class);
 
     // Act
-    rtpStreamWriter.start();
+    rtpStreamWriter.start(mockSocket);
 
     // Allow some time for the thread to execute
     threadPool.shutdown();

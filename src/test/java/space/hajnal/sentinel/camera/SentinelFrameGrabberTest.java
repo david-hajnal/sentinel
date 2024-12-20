@@ -2,6 +2,7 @@ package space.hajnal.sentinel.camera;
 
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.Mockito.any;
 import static org.mockito.Mockito.anyInt;
 import static org.mockito.Mockito.doAnswer;
@@ -14,6 +15,7 @@ import static org.mockito.Mockito.when;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
+import lombok.SneakyThrows;
 import org.bytedeco.javacv.Frame;
 import org.bytedeco.javacv.FrameGrabber;
 import org.junit.jupiter.api.AfterEach;
@@ -58,11 +60,11 @@ class SentinelFrameGrabberTest {
   }
 
   @Test
-  void testCaptureFunctionIsCalledWithFrame() throws InterruptedException {
+  void testCaptureFunctionIsCalledWithFrame() throws Exception {
     // Arrange
     CountDownLatch latch = new CountDownLatch(1);
     FrameGrabberCallback frameProcessor = mock(FrameGrabberCallback.class);
-    when(frameProcessor.onFrameGrabbed(any(Frame.class))).thenAnswer(invocation -> {
+    when(frameProcessor.onFrameGrabbed(any(Frame.class), anyLong())).thenAnswer(invocation -> {
       latch.countDown();
       return null;
     });
@@ -72,7 +74,7 @@ class SentinelFrameGrabberTest {
         "Latch should have counted down after frame processing.");
 
     // Assert
-    verify(frameProcessor, times(1)).onFrameGrabbed(any(Frame.class));
+    verify(frameProcessor, times(1)).onFrameGrabbed(any(Frame.class), anyLong());
   }
 
   @Test

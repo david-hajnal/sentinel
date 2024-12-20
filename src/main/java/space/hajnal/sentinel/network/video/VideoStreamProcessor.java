@@ -1,4 +1,4 @@
-package space.hajnal.sentinel.network;
+package space.hajnal.sentinel.network.video;
 
 import java.util.List;
 import java.util.Map;
@@ -9,10 +9,15 @@ import lombok.extern.slf4j.Slf4j;
 import space.hajnal.sentinel.network.model.RTPPacket;
 
 @Slf4j
-public class FrameProcessor {
+public class VideoStreamProcessor {
 
   private final Map<Long, SortedMap<Integer, byte[]>> frameBufferByTimestamp = new TreeMap<>();
   private final List<FrameListener> subscribers = new CopyOnWriteArrayList<>();
+  private final FrameProcessor frameProcessor;
+
+  public VideoStreamProcessor(FrameProcessor frameProcessor) {
+    this.frameProcessor = frameProcessor;
+  }
 
   public void processPacket(RTPPacket rtpPacket) {
     long timestamp = rtpPacket.getTimestamp();
@@ -22,28 +27,17 @@ public class FrameProcessor {
         .computeIfAbsent(timestamp, k -> new TreeMap<>())
         .put(sequenceNumber, rtpPacket.getPayload());
 
+    log.info("frameBufferByTimestamp size: {}", frameBufferByTimestamp.size());
+
     if (rtpPacket.isMarker()) {
       SortedMap<Integer, byte[]> packets = frameBufferByTimestamp.remove(timestamp);
-      byte[] frame = reassembleFrame(packets);
+      byte[] frame = frameProcessor.reassembleFrame(packets);
       notifySubscribers(frame);
     }
   }
 
   SortedMap<Integer, byte[]> getFramesByTimestamp(long timestamp) {
     return frameBufferByTimestamp.get(timestamp);
-  }
-
-  byte[] reassembleFrame(SortedMap<Integer, byte[]> packets) {
-    int totalLength = packets.values().stream().mapToInt(p -> p.length).sum();
-    byte[] completeFrame = new byte[totalLength];
-    int offset = 0;
-
-    for (byte[] payload : packets.values()) {
-      System.arraycopy(payload, 0, completeFrame, offset, payload.length);
-      offset += payload.length;
-    }
-    log.info("Reassembled frame size: {}", completeFrame.length);
-    return completeFrame;
   }
 
   public void addSubscriber(FrameListener listener) {

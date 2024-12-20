@@ -13,43 +13,40 @@ import space.hajnal.sentinel.network.serialization.RTPPacketDeserializer;
 @Slf4j
 public class PacketReceiver implements AutoCloseable {
 
-  private final DatagramSocket socket;
+  private DatagramSocket socket;
   private final DelayQueue<DelayedRTPPacket> packetQueue;
   private volatile boolean running = true;
   private final ServerOptions serverOptions;
   private final RTPPacketDeserializer rtpPacketDeserializer;
   private final long packetTtlMillis;
 
-  public PacketReceiver(DatagramSocket socket, ServerOptions serverOptions,
+  public PacketReceiver(ServerOptions serverOptions,
       RTPPacketDeserializer rtpPacketDeserializer, long packetTtlMillis) {
-    this.socket = socket;
     this.packetQueue = new DelayQueue<>();
     this.serverOptions = serverOptions;
     this.rtpPacketDeserializer = rtpPacketDeserializer;
     this.packetTtlMillis = packetTtlMillis;
   }
 
-  public void startReceiving() {
+  public void startReceiving(DatagramSocket socket) {
+    this.socket = socket;
     while (running) {
       try {
         byte[] buffer = new byte[serverOptions.getMtu()];
         DatagramPacket packet = new DatagramPacket(buffer, buffer.length);
         socket.receive(packet);
         RTPPacket rtpPacket = rtpPacketDeserializer.deserialize(packet);
+        //log.info("Received packet with timestamp: {}", rtpPacket.getTimestamp());
         putPacket(rtpPacket);
       } catch (IOException e) {
         if (running) {
           log.error("Error while receiving packets", e);
         }
-      } catch (InterruptedException e) {
-        log.error("Thread interrupted while receiving packets", e);
-        Thread.currentThread().interrupt();
-        break;
       }
     }
   }
 
-  void putPacket(RTPPacket rtpPacket) throws InterruptedException {
+  void putPacket(RTPPacket rtpPacket) {
     DelayedRTPPacket delayedPacket = new DelayedRTPPacket(rtpPacket, packetTtlMillis);
     packetQueue.put(delayedPacket);
   }
@@ -62,7 +59,7 @@ public class PacketReceiver implements AutoCloseable {
   @Override
   public void close() {
     running = false;
-    if (!socket.isClosed()) {
+    if (socket != null && !socket.isClosed()) {
       socket.close();
     }
     log.info("PacketReceiver closed");

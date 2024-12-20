@@ -4,5 +4,5 @@ import org.bytedeco.javacv.Frame;
 
 public interface FrameGrabberCallback {
 
-  Frame onFrameGrabbed(Frame frame);
+  Frame onFrameGrabbed(Frame frame, long timestamp);
 }

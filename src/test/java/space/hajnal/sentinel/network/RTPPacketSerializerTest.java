@@ -31,7 +31,7 @@ class RTPPacketSerializerTest {
 
     // Assert
     assertEquals(1, packets.size(), "A single packet should be generated for frame smaller than MTU.");
-    RTPPacket packet = packets.get(0);
+    RTPPacket packet = packets.getFirst();
     assertEquals(96, packet.getPayloadType());
     assertEquals(0, packet.getSequenceNumber());
     assertEquals(timestamp, packet.getTimestamp());

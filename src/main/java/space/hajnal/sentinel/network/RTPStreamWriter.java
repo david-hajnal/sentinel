@@ -1,5 +1,7 @@
 package space.hajnal.sentinel.network;
 
+import java.net.DatagramPacket;
+import java.net.DatagramSocket;
 import java.util.concurrent.ExecutorService;
 import lombok.extern.slf4j.Slf4j;
 import space.hajnal.sentinel.camera.SentinelFrameGrabber;
@@ -19,7 +21,8 @@ public class RTPStreamWriter implements AutoCloseable {
     this.threadPool = threadPool;
   }
 
-  public void start() {
+  public void start(DatagramSocket socket) {
+    rtpSocketSender.open(socket);
     threadPool.submit(() -> {
       try {
         log.info("Starting RTPStreamWriter");
@@ -31,10 +34,14 @@ public class RTPStreamWriter implements AutoCloseable {
   }
 
   private void captureFrames() {
-    sentinelFrameGrabber.capture(frame -> {
-      rtpSocketSender.send(frame, System.currentTimeMillis());
-      return frame;
-    });
+    try {
+      sentinelFrameGrabber.capture((frame, ts) -> {
+        rtpSocketSender.send(frame, ts);
+        return frame;
+      });
+    } catch (Exception e) {
+      log.error("Error while capturing frames", e);
+    }
   }
 
   @Override

@@ -29,7 +29,7 @@ class PacketReceiverTest {
     threadPool = Executors.newFixedThreadPool(2);
 
     rtpPacketDeserializer = mock(RTPPacketDeserializer.class);
-    packetReceiver = new PacketReceiver(mockSocket, serverOptions, rtpPacketDeserializer, 1000);
+    packetReceiver = new PacketReceiver(serverOptions, rtpPacketDeserializer, 1000);
   }
 
   @AfterEach
@@ -43,6 +43,7 @@ class PacketReceiverTest {
   void testStartReceiving_PacketsAreReceived() throws Exception {
     // Arrange: Mock the DatagramSocket behavior
     RTPPacket rtpPacket = mock(RTPPacket.class);
+    DatagramSocket mockSocket = mock(DatagramSocket.class);
     when(rtpPacketDeserializer.deserialize(any())).thenReturn(rtpPacket);
     CountDownLatch latch = new CountDownLatch(1);
     byte[] data = {0x01, 0x02, 0x03};
@@ -57,7 +58,7 @@ class PacketReceiverTest {
     }).when(mockSocket).receive(any());
 
     // Act
-    startReceiving();
+    startReceiving(mockSocket);
     // Retrieve the packet in the processor pool
     Future<RTPPacket> futurePacket = threadPool.submit(this::getRtpPacket);
 
@@ -106,16 +107,16 @@ class PacketReceiverTest {
   void testStartReceiving_HandlesIOExceptionGracefully() throws Exception {
     // Arrange
     doThrow(new IOException("Socket error")).when(mockSocket).receive(any());
-
+    DatagramSocket mockSocket = mock(DatagramSocket.class);
     // Act
-    startReceiving();
+    startReceiving(mockSocket);
 
     // No exception thrown, socket error is logged
     assertTrue(true); // Implicit pass if no exception is thrown
   }
 
-  private void startReceiving() {
-    threadPool.submit(packetReceiver::startReceiving); // Don't block with get()
+  private void startReceiving(DatagramSocket socket) {
+    threadPool.submit(() -> packetReceiver.startReceiving(socket)); // Don't block with get()
   }
 
   private RTPPacket getRtpPacket() {

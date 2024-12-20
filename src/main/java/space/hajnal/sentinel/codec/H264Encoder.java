@@ -1,10 +1,12 @@
 package space.hajnal.sentinel.codec;
 
 import java.io.ByteArrayOutputStream;
+import lombok.extern.slf4j.Slf4j;
 import org.bytedeco.javacv.FFmpegFrameRecorder;
 import org.bytedeco.javacv.Frame;
 import space.hajnal.sentinel.camera.SentinelFrameGrabberOptions;
 
+@Slf4j
 public class H264Encoder {
 
   private SentinelFrameGrabberOptions options;
@@ -23,7 +25,7 @@ public class H264Encoder {
       recorder.record(frame);
       recorder.stop();
     } catch (Exception e) {
-      e.printStackTrace();
+      log.error("Error while encoding frame", e);
       return new byte[0];
     }
 

@@ -65,6 +65,7 @@ public class RTPSocketSender implements AutoCloseable {
 
   private void send(RTPPacket rtpPacket) {
     try {
+      //log.debug("Sending RTP packet with timestamp: {}", rtpPacket.getTimestamp());
       socket.send(new DatagramPacket(rtpPacket.toBytes(), rtpPacket.toBytes().length,
           InetAddress.getByName(serverOptions.getServerAddress()),
           serverOptions.getServerPort()));

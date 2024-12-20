@@ -3,6 +3,7 @@ package space.hajnal.sentinel.camera;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicLong;
 import lombok.extern.slf4j.Slf4j;
 import org.bytedeco.javacv.Frame;
 import org.bytedeco.javacv.FrameGrabber;
@@ -14,6 +15,8 @@ public class SentinelFrameGrabber implements AutoCloseable {
   private boolean running = false;
   private final ScheduledExecutorService scheduler;
   private final FrameGrabberFactory frameGrabberFactory;
+
+  private FrameGrabber grabber;
 
   public SentinelFrameGrabber(SentinelFrameGrabberOptions options,
       FrameGrabberFactory frameGrabberFactory) {
@@ -30,21 +33,24 @@ public class SentinelFrameGrabber implements AutoCloseable {
     this.frameGrabberFactory = frameGrabberFactory;
   }
 
-  public void capture(FrameGrabberCallback fn) {
+  public void capture(FrameGrabberCallback fn) throws Exception {
 
     if (fn == null) {
       throw new IllegalArgumentException("Function cannot be null");
     }
 
-    try (FrameGrabber grabber = frameGrabberFactory.create(options.getCameraIndex())) {
+    try {
+
+      grabber = frameGrabberFactory.create(options.getCameraIndex());
 
       running = true;
       grabber.setImageWidth(options.getImageWidth());
       grabber.setImageHeight(options.getImageHeight());
       grabber.setFrameRate(options.getFrameRate());
       grabber.start();
-
+      log.info("Frame grabber started");
       long frameDurationMillis = 1000 / options.getFrameRate();
+      AtomicLong timestamp = new AtomicLong(0);
 
       scheduler.scheduleAtFixedRate(() -> {
         if (!running) {
@@ -56,23 +62,27 @@ public class SentinelFrameGrabber implements AutoCloseable {
           if (frame == null) {
             log.info("No more frames to grab.");
           } else {
-            fn.onFrameGrabbed(frame);
+            fn.onFrameGrabbed(frame, timestamp.addAndGet(90000 / options.getFrameRate()));
           }
         } catch (Exception e) {
           log.error("Error while capturing frames", e);
         }
-      }, 100, frameDurationMillis, TimeUnit.MILLISECONDS);
+      }, 200, frameDurationMillis, TimeUnit.MILLISECONDS);
 
-    } catch (Exception e) {
+    } catch (
+        Exception e) {
       log.error("Error initializing frame grabber", e);
-      running = false;
-      scheduler.shutdown();
+      this.close();
     }
   }
 
   @Override
   public void close() throws Exception {
     running = false;
+    if (grabber != null) {
+      grabber.stop();
+      grabber.close();
+    }
     scheduler.shutdown();
   }
 
