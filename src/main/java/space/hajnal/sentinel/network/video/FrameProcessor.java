@@ -6,7 +6,7 @@ import lombok.extern.slf4j.Slf4j;
 @Slf4j
 public class FrameProcessor {
 
-  byte[] reassembleFrame(SortedMap<Integer, byte[]> packets) {
+  public byte[] reassembleFrame(SortedMap<Integer, byte[]> packets) {
     int totalLength = packets.values().stream().mapToInt(p -> p.length).sum();
     byte[] completeFrame = new byte[totalLength];
     int offset = 0;

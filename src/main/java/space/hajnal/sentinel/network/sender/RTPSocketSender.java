@@ -7,8 +7,8 @@ import java.net.InetAddress;
 import java.util.List;
 import lombok.extern.slf4j.Slf4j;
 import org.bytedeco.javacv.Frame;
-import space.hajnal.sentinel.network.model.RTPPacket;
 import space.hajnal.sentinel.codec.H264Encoder;
+import space.hajnal.sentinel.network.model.RTPPacket;
 import space.hajnal.sentinel.network.model.ServerOptions;
 import space.hajnal.sentinel.network.serialization.RTPPacketSerializer;
 
@@ -55,7 +55,7 @@ public class RTPSocketSender implements AutoCloseable {
       byte[] frameData = h264Encoder.encode(frame);
       int mtu = serverOptions.getMtu();
       List<RTPPacket> rtpPackets = rtpPacketSerializer.serialize(frameData, mtu, timestamp, ssrc);
-
+      log.debug("Sending frame with timestamp: {}, size: {}", timestamp, rtpPackets.size());
       rtpPackets.forEach(this::send);
 
     } catch (Exception e) {

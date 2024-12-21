@@ -36,6 +36,13 @@ import space.hajnal.sentinel.network.serialization.RTPPacketSerializer;
 @Slf4j
 public class RTPStream {
 
+  public static final SentinelFrameGrabberOptions GRABBER_OPTIONS = SentinelFrameGrabberOptions.builder()
+      .cameraIndex(0)
+      .frameRate(30)
+      .imageHeight(480)
+      .imageWidth(640)
+      .build();
+
   public static void main(String[] args) {
     Loader.load(opencv_core.class);
     Loader.load(opencv_videoio.class);
@@ -49,13 +56,6 @@ public class RTPStream {
     av_log_set_level(AV_LOG_PANIC);
     try (ExecutorService executorService = Executors.newVirtualThreadPerTaskExecutor()) {
 
-      SentinelFrameGrabberOptions grabberOptions = SentinelFrameGrabberOptions.builder()
-          .cameraIndex(0)
-          .frameRate(30)
-          .imageHeight(480)
-          .imageWidth(640)
-          .build();
-
       FrameGrabberFactory frameGrabberFactory = new FrameGrabberFactory();
 
       ServerOptions serverOptions = ServerOptions.builder().serverAddress("127.0.0.1")
@@ -63,12 +63,13 @@ public class RTPStream {
           .mtu(1400)
           .build();
 
-      H264Encoder encoder = new H264Encoder(grabberOptions);
+      H264Encoder encoder = new H264Encoder(GRABBER_OPTIONS);
       RTPPacketSerializer rtpPacketSerializer = new RTPPacketSerializer();
       RTPPacketDeserializer rtpPacketDeserializer = new RTPPacketDeserializer();
       FrameProcessor frameProcessor = new FrameProcessor();
-      VideoStreamProcessor videoStreamProcessor = new VideoStreamProcessor(frameProcessor);
-      SentinelFrameGrabber grabber = new SentinelFrameGrabber(grabberOptions,
+      VideoStreamProcessor videoStreamProcessor = new VideoStreamProcessor(frameProcessor,
+          GRABBER_OPTIONS.getFrameRate());
+      SentinelFrameGrabber grabber = new SentinelFrameGrabber(GRABBER_OPTIONS,
           frameGrabberFactory);
       RTPSocketSender rtpSocketSender = new RTPSocketSender(serverOptions,
           encoder,
@@ -78,13 +79,11 @@ public class RTPStream {
           executorService);
       PacketReceiver packetReceiver = new PacketReceiver(
           serverOptions,
-          rtpPacketDeserializer, 500);
+          rtpPacketDeserializer, 50);
       RTPStreamReader rtpStreamReader = new RTPStreamReader(videoStreamProcessor, packetReceiver,
           executorService);
 
-      CanvasFrame canvas = new CanvasFrame("RTP Sender Display");
-      canvas.setSize(grabberOptions.getImageWidth(), grabberOptions.getImageHeight());
-      canvas.setDefaultCloseOperation(EXIT_ON_CLOSE);
+      CanvasFrame canvas = createCanvas("Receiver");
 
       CountDownLatch latch = new CountDownLatch(1);
       canvas.addWindowListener(new WindowAdapter() {
@@ -108,7 +107,7 @@ public class RTPStream {
           rtpStreamReader.start(socket);
           rtpStreamWriter.start(socket);
 
-          videoStreamProcessor.addSubscriber(frame -> display(frame, canvas, grabberOptions));
+          videoStreamProcessor.addSubscriber(frame -> display(frame, canvas, GRABBER_OPTIONS));
 
         });
 
@@ -123,11 +122,34 @@ public class RTPStream {
 
   }
 
+  public static CanvasFrame createCanvas(String name) {
+    CanvasFrame canvas = new CanvasFrame(name);
+    canvas.setSize(RTPStream.GRABBER_OPTIONS.getImageWidth(),
+        RTPStream.GRABBER_OPTIONS.getImageHeight());
+    canvas.setDefaultCloseOperation(EXIT_ON_CLOSE);
+    return canvas;
+  }
+
+  public static Frame fromBytes(byte[] frameData, int width, int height) {
+    try (FFmpegFrameGrabber grabber = new FFmpegFrameGrabber(new ByteArrayInputStream(frameData))) {
+      grabber.setImageWidth(width);
+      grabber.setImageHeight(height);
+      grabber.setPixelFormat(org.bytedeco.ffmpeg.global.avutil.AV_PIX_FMT_BGR24); // Pixel format
+      grabber.start();
+      Frame frame = grabber.grabImage();
+      grabber.stop();
+      return frame;
+    } catch (Exception e) {
+      log.error("Error while displaying frame", e);
+      return null;
+    }
+  }
+
   private static void display(byte[] frameData, CanvasFrame canvas,
       SentinelFrameGrabberOptions options) {
     log.debug("Displaying frame");
     try (FFmpegFrameGrabber grabber = new FFmpegFrameGrabber(new ByteArrayInputStream(frameData))) {
-     // grabber.setFrameRate(options.getFrameRate());
+      // grabber.setFrameRate(options.getFrameRate());
       grabber.setImageWidth(options.getImageWidth());
       grabber.setImageHeight(options.getImageHeight());
       grabber.setPixelFormat(org.bytedeco.ffmpeg.global.avutil.AV_PIX_FMT_BGR24); // Pixel format
