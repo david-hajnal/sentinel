@@ -1,5 +1,7 @@
 package space.hajnal.sentinel.network.video;
 
+import java.nio.file.Files;
+import java.nio.file.Paths;
 import java.util.List;
 import java.util.Map;
 import java.util.SortedMap;
@@ -9,7 +11,9 @@ import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicReference;
 import lombok.extern.slf4j.Slf4j;
+import space.hajnal.sentinel.camera.model.SentinelFrame;
 import space.hajnal.sentinel.network.model.RTPPacket;
 
 @Slf4j
@@ -19,19 +23,21 @@ public class VideoStreamProcessor {
   private final Map<Long, Long> lastArrivalTimeByTimestamp = new ConcurrentHashMap<>();
   private final List<FrameListener> subscribers = new CopyOnWriteArrayList<>();
   private final FrameProcessor frameProcessor;
-  private final ScheduledExecutorService scheduler = Executors.newScheduledThreadPool(1);
+  private final ScheduledExecutorService scheduler;
   private final double frameIntervalMillis;  // Interval for frame assembly (e.g., 33.3ms for 30 fps)
-  private volatile double jitter = 0;
+  private final AtomicReference<Double> jitter = new AtomicReference<>(0.0);
   private static final double JITTER_ALPHA = 0.125;  // Jitter smoothing factor
   private volatile long lastAssembledTimestamp = -1; // Track last assembled timestamp
 
   public VideoStreamProcessor(FrameProcessor frameProcessor) {
-    this(frameProcessor, 30); // Default 30 FPS
+    this(frameProcessor, 30, Executors.newScheduledThreadPool(2));
   }
 
-  public VideoStreamProcessor(FrameProcessor frameProcessor, int fps) {
+  public VideoStreamProcessor(FrameProcessor frameProcessor, int fps,
+      ScheduledExecutorService scheduler) {
     this.frameProcessor = frameProcessor;
     this.frameIntervalMillis = 1000.0 / fps;
+    this.scheduler = scheduler;
 
     // Initialize lastAssembledTimestamp to the earliest frame (if available)
     initializeFrameAssembly();
@@ -61,7 +67,7 @@ public class VideoStreamProcessor {
     int sequenceNumber = rtpPacket.getSequenceNumber();
     long arrivalTime = System.currentTimeMillis();
 
-    log.debug("Received packet: Timestamp={} Seq={}", timestamp, sequenceNumber);
+    // log.debug("Received packet: Timestamp={} Seq={}", timestamp, sequenceNumber);
 
     calculateJitter(timestamp, arrivalTime);
 
@@ -74,10 +80,12 @@ public class VideoStreamProcessor {
     Long previousArrivalTime = lastArrivalTimeByTimestamp.put(timestamp, arrivalTime);
     if (previousArrivalTime != null) {
       long interarrivalDifference = Math.abs(arrivalTime - previousArrivalTime);
-      double jitterSample = Math.abs(interarrivalDifference - jitter);
-      jitter += JITTER_ALPHA * (jitterSample - jitter);
+      jitter.updateAndGet(j -> {
+        double jitterSample = Math.abs(interarrivalDifference - j);
+        return j + JITTER_ALPHA * (jitterSample - j);
+      });
 
-      log.debug("Updated jitter: {} ms (Sample: {} ms)", jitter, jitterSample);
+      //log.debug("Updated jitter: {} ms", jitter);
     }
   }
 
@@ -97,12 +105,13 @@ public class VideoStreamProcessor {
       return;
     }
 
-    long jitterCompensation = Math.round(jitter);  // Apply jitter adjustment
+    long jitterCompensation = Math.round(jitter.get());  // Apply jitter adjustment
     long adjustedDelay = (long) (
         Math.max(frameIntervalMillis, frameIntervalMillis + jitterCompensation));
 
-    log.debug("Assembling frame for timestamp: {} (Jitter: {} ms, Delay: {} ms)",
-        nextTimestamp, jitterCompensation, adjustedDelay);
+    log.debug("Assembling frame for timestamp: {} (Jitter: {} ms, Delay: {} ms) with {} packets",
+        nextTimestamp, jitterCompensation, adjustedDelay,
+        frameBufferByTimestamp.get(nextTimestamp).size());
 
     // Schedule the frame assembly with adjusted delay
     scheduler.schedule(() -> assembleFrame(nextTimestamp), adjustedDelay, TimeUnit.MILLISECONDS);
@@ -117,34 +126,61 @@ public class VideoStreamProcessor {
 
     int firstSeq = packets.firstKey();
     int lastSeq = packets.lastKey();
+    byte[] lastGoodPacket = null;
+    boolean frameComplete = true;
 
+    // Reorder and handle missing packets
     for (int seq = firstSeq; seq <= lastSeq; seq++) {
       if (!packets.containsKey(seq)) {
-        long missingThreshold = Math.round(jitter * 1.5);  // Allow late arrival within 1.5x jitter
-        log.warn("Packet Seq={} missing. Jitter threshold={}ms", seq, missingThreshold);
+        long missingThreshold = Math.round(jitter.get() * 1.5);  // Allow packet arrival within jitter range
+        long timeSinceLastPacket = System.currentTimeMillis() - lastArrivalTimeByTimestamp.getOrDefault(timestamp, 0L);
+
+        // Error concealment: Duplicate last packet if within jitter threshold
+        if (timeSinceLastPacket <= missingThreshold && lastGoodPacket != null) {
+          log.warn("Packet Seq={} missing. Using previous packet for concealment.", seq);
+          packets.put(seq, lastGoodPacket);  // Duplicate last good packet
+        } else {
+          log.error("Packet Seq={} missing beyond jitter threshold. Skipping frame.", seq);
+          frameComplete = false;
+          break;
+        }
       }
+      lastGoodPacket = packets.get(seq);
     }
 
-    byte[] frame = frameProcessor.reassembleFrame(packets);
-    if (frame != null) {
-      lastAssembledTimestamp = timestamp;
-      notifySubscribers(frame);
+    log.debug(lastGoodPacket == null ? "Last good packet is null" : "Last good packet is not null");
+
+    // Assemble the frame if complete
+    if (frameComplete) {
+      byte[] frame = frameProcessor.reassembleFrame(packets);
+       frameProcessor.compareSentAndReceivedPackets(packets, timestamp);
+      if (frame != null) {
+        lastAssembledTimestamp = timestamp;
+        notifySubscribers(SentinelFrame.builder().data(frame).timestamp(timestamp).build());
+      } else {
+        log.error("Failed to assemble frame for timestamp: {}", timestamp);
+      }
+    } else {
+      log.warn("Frame skipped for timestamp: {} due to excessive packet loss.", timestamp);
     }
   }
-
 
   public void addSubscriber(FrameListener listener) {
     subscribers.add(listener);
   }
 
-  private void notifySubscribers(byte[] frame) {
+  void notifySubscribers(SentinelFrame frame) {
     for (FrameListener listener : subscribers) {
       listener.onFrameAvailable(frame);
     }
   }
 
+  SortedMap<Integer, byte[]> getFramesByTimestamp(long timestamp) {
+    return frameBufferByTimestamp.get(timestamp);
+  }
+
   public interface FrameListener {
 
-    void onFrameAvailable(byte[] frame);
+    void onFrameAvailable(SentinelFrame frame);
   }
 }

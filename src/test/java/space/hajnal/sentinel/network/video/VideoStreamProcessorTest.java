@@ -3,6 +3,7 @@ package space.hajnal.sentinel.network.video;
 import java.util.TreeMap;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import space.hajnal.sentinel.camera.model.SentinelFrame;
 import space.hajnal.sentinel.network.model.RTPPacket;
 
 import java.util.SortedMap;
@@ -62,7 +63,8 @@ class VideoStreamProcessorTest {
     videoStreamProcessor.processPacket(packet2);
 
     // Assert
-    verify(mockListener, times(1)).onFrameAvailable(new byte[]{0x01, 0x02, 0x03, 0x04});
+    byte[] bytes = {0x01, 0x02, 0x03, 0x04};
+    verify(mockListener, times(1)).onFrameAvailable(SentinelFrame.builder().data(bytes).build());
     assertNull(videoStreamProcessor.getFramesByTimestamp(1000L),
         "Frame buffer for timestamp 1000 should be removed");
   }
@@ -91,7 +93,8 @@ class VideoStreamProcessorTest {
     videoStreamProcessor.processPacket(packet2);
 
     // Assert
-    verify(mockListener, times(1)).onFrameAvailable(new byte[]{0x05, 0x06, 0x07, 0x08});
+    byte[] bytes = {0x05, 0x06, 0x07, 0x08};
+    verify(mockListener, times(1)).onFrameAvailable(SentinelFrame.builder().data(bytes).build());
   }
 
   @Test
@@ -106,11 +109,12 @@ class VideoStreamProcessorTest {
     byte[] frame = new byte[]{0x01, 0x02, 0x03};
 
     // Act
-    videoStreamProcessor.notifySubscribers(frame);
+    SentinelFrame sentinelFrame = SentinelFrame.builder().data(frame).build();
+    videoStreamProcessor.notifySubscribers(sentinelFrame);
 
     // Assert
-    verify(listener1, times(1)).onFrameAvailable(frame);
-    verify(listener2, times(1)).onFrameAvailable(frame);
+    verify(listener1, times(1)).onFrameAvailable(sentinelFrame);
+    verify(listener2, times(1)).onFrameAvailable(sentinelFrame);
   }
 
 }

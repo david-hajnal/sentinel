@@ -1,6 +1,5 @@
 package space.hajnal.sentinel.camera;
 
-import static javax.swing.WindowConstants.EXIT_ON_CLOSE;
 import static space.hajnal.sentinel.stream.RTPStream.createCanvas;
 
 import java.util.concurrent.Executors;

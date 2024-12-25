@@ -55,7 +55,7 @@ class RTPSocketSenderTest {
     mockSocket = mock(DatagramSocket.class);
 
     // Use a spy to inject the mock socket into the RTPStream class
-    rtpSocketSender = spy(new RTPSocketSender(serverOptions, h264Encoder, rtpPacketSerializer));
+    rtpSocketSender = spy(new RTPSocketSender(serverOptions, h264Encoder, rtpPacketSerializer, null));
     doReturn(true).when(mockSocket).isClosed();
   }
 

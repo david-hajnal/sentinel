@@ -3,6 +3,7 @@ package space.hajnal.sentinel.network.video;
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
+import java.util.Arrays;
 import java.util.SortedMap;
 import java.util.TreeMap;
 import org.junit.jupiter.api.BeforeEach;
@@ -22,11 +23,13 @@ class FrameProcessorTest {
     // Arrange: Create a map of packets with small payloads
     SortedMap<Integer, byte[]> packets = new TreeMap<>();
     packets.put(1, new byte[]{0x01, 0x02, 0x03});
-    packets.put(2, new byte[]{0x04, 0x05});
     packets.put(3, new byte[]{0x06, 0x07, 0x08});
+    packets.put(2, new byte[]{0x04, 0x05});
 
     // Act
     byte[] reassembledFrame = frameProcessor.reassembleFrame(packets);
+
+    System.out.println("Reassembled frame: " + Arrays.toString(reassembledFrame));
 
     // Assert
     assertArrayEquals(new byte[]{0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08}, reassembledFrame);

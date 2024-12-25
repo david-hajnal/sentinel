@@ -4,15 +4,23 @@ package space.hajnal.sentinel.network.video;
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.awt.image.BufferedImage;
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.File;
+import java.util.Arrays;
+import java.util.Collection;
+import java.util.Collections;
 import java.util.List;
 import java.util.SortedMap;
 import java.util.TreeMap;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
 import javax.imageio.ImageIO;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import space.hajnal.sentinel.network.model.RTPPacket;
@@ -23,12 +31,19 @@ class VideoStreamProcessorIntegrationTest {
   private VideoStreamProcessor videoStreamProcessor;
   private FrameProcessor frameProcessor;
   private RTPPacketSerializer rtpPacketSerializer;
+  private ScheduledExecutorService scheduler;
 
   @BeforeEach
   void setUp() {
     frameProcessor = new FrameProcessor();
     videoStreamProcessor = new VideoStreamProcessor(frameProcessor);
     rtpPacketSerializer = new RTPPacketSerializer();
+    scheduler = Executors.newSingleThreadScheduledExecutor();
+  }
+
+  @AfterEach
+  void tearDown() {
+    scheduler.shutdown();
   }
 
   @Test
@@ -52,19 +67,27 @@ class VideoStreamProcessorIntegrationTest {
     System.out.println("Original frame size: " + imageBytes.length);
 
     // Create RTP packets
-    List<RTPPacket> serialize = rtpPacketSerializer.serialize(imageBytes, 1400, 1234L, 123);
+    List<RTPPacket> rtpPacketList = rtpPacketSerializer.serialize(imageBytes, 1400, 1234L, 123);
+    Collections.shuffle(rtpPacketList); // Randomize packet order
     SortedMap<Integer, RTPPacket> packets = new TreeMap<>();
-    for (RTPPacket rtpPacket : serialize) {
+    for (RTPPacket rtpPacket : rtpPacketList) {
+      System.out.println("Packet: " + rtpPacket.getSequenceNumber());
       packets.put(rtpPacket.getSequenceNumber(), rtpPacket);
     }
 
     // Add a subscriber to capture the final frame
+    CountDownLatch latch = new CountDownLatch(1);
     final byte[][] receivedFrame = {null}; // Use an array to capture the frame in the test
-    videoStreamProcessor.addSubscriber(frame -> receivedFrame[0] = frame);
+    videoStreamProcessor.addSubscriber(frame -> {
+      receivedFrame[0] = frame.getData();
+      latch.countDown();
+    });
 
     // Act: Process the packets
-    packets.values().forEach(videoStreamProcessor::processPacket);
+    packets.keySet().forEach(seq -> videoStreamProcessor.processPacket(packets.get(seq)));
 
+    assertTrue(latch.await(1000, java.util.concurrent.TimeUnit.MILLISECONDS),
+        "Timeout waiting for frame assembly");
     // Assert: Ensure the reassembled frame matches the original image data
     assertNotNull(receivedFrame[0], "Frame should not be null");
     assertEquals(imageBytes.length, receivedFrame[0].length, "Frame size mismatch");

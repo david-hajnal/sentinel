@@ -29,7 +29,7 @@ class PacketReceiverTest {
     threadPool = Executors.newFixedThreadPool(2);
 
     rtpPacketDeserializer = mock(RTPPacketDeserializer.class);
-    packetReceiver = new PacketReceiver(serverOptions, rtpPacketDeserializer, 1000);
+    packetReceiver = new PacketReceiver(serverOptions, rtpPacketDeserializer, 5000);
   }
 
   @AfterEach

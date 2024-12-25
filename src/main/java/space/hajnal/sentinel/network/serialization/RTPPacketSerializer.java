@@ -10,9 +10,9 @@ public class RTPPacketSerializer {
    * Serialize a frame into RTP packets.
    *
    * @param frameData The frame data to serialize.
-   * @param mtu The maximum transmission unit.
+   * @param mtu       The maximum transmission unit.
    * @param timestamp The timestamp of the frame.
-   * @param ssrc The synchronization source identifier.
+   * @param ssrc      The synchronization source identifier.
    * @return A list of RTP packets.
    */
   public List<RTPPacket> serialize(byte[] frameData, int mtu, long timestamp, int ssrc) {

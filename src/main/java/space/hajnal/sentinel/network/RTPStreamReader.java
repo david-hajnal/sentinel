@@ -32,7 +32,7 @@ public class RTPStreamReader implements AutoCloseable {
       while (!Thread.currentThread().isInterrupted()) {
         try {
           RTPPacket rtpPacket = packetReceiver.retrievePacket(); // Block until a packet is available
-          log.debug("Processing packet with timestamp: {}", rtpPacket.getTimestamp());
+          //log.debug("Processing packet with timestamp: {} Seq: {}", rtpPacket.getTimestamp(), rtpPacket.getSequenceNumber());
           videoStreamProcessor.processPacket(rtpPacket);
         } catch (InterruptedException e) {
           log.info("Processing interrupted, shutting down");

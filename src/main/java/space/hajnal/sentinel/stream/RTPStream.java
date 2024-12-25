@@ -8,9 +8,12 @@ import java.awt.event.WindowAdapter;
 import java.awt.event.WindowEvent;
 import java.io.ByteArrayInputStream;
 import java.net.DatagramSocket;
+import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
 import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
 import org.bytedeco.javacpp.Loader;
@@ -22,6 +25,8 @@ import org.bytedeco.opencv.global.opencv_videoio;
 import space.hajnal.sentinel.camera.FrameGrabberFactory;
 import space.hajnal.sentinel.camera.SentinelFrameGrabber;
 import space.hajnal.sentinel.camera.SentinelFrameGrabberOptions;
+import space.hajnal.sentinel.camera.SentinelFrameGrabberStatic;
+import space.hajnal.sentinel.camera.model.SentinelFrame;
 import space.hajnal.sentinel.codec.H264Encoder;
 import space.hajnal.sentinel.network.video.FrameProcessor;
 import space.hajnal.sentinel.network.video.VideoStreamProcessor;
@@ -38,9 +43,9 @@ public class RTPStream {
 
   public static final SentinelFrameGrabberOptions GRABBER_OPTIONS = SentinelFrameGrabberOptions.builder()
       .cameraIndex(0)
-      .frameRate(30)
-      .imageHeight(480)
+      .frameRate(1)
       .imageWidth(640)
+      .imageHeight(480)
       .build();
 
   public static void main(String[] args) {
@@ -56,6 +61,7 @@ public class RTPStream {
     av_log_set_level(AV_LOG_PANIC);
     try (ExecutorService executorService = Executors.newVirtualThreadPerTaskExecutor()) {
 
+      ScheduledExecutorService scheduler = Executors.newScheduledThreadPool(2);
       FrameGrabberFactory frameGrabberFactory = new FrameGrabberFactory();
 
       ServerOptions serverOptions = ServerOptions.builder().serverAddress("127.0.0.1")
@@ -68,22 +74,24 @@ public class RTPStream {
       RTPPacketDeserializer rtpPacketDeserializer = new RTPPacketDeserializer();
       FrameProcessor frameProcessor = new FrameProcessor();
       VideoStreamProcessor videoStreamProcessor = new VideoStreamProcessor(frameProcessor,
-          GRABBER_OPTIONS.getFrameRate());
-      SentinelFrameGrabber grabber = new SentinelFrameGrabber(GRABBER_OPTIONS,
-          frameGrabberFactory);
+          GRABBER_OPTIONS.getFrameRate(), scheduler);
+//      SentinelFrameGrabber grabber = new SentinelFrameGrabber(GRABBER_OPTIONS,
+//          frameGrabberFactory);
+      SentinelFrameGrabber grabber = new SentinelFrameGrabberStatic(GRABBER_OPTIONS);
       RTPSocketSender rtpSocketSender = new RTPSocketSender(serverOptions,
           encoder,
-          rtpPacketSerializer);
+          rtpPacketSerializer, frameProcessor);
       DatagramSocket socket = new DatagramSocket(5004);
       RTPStreamWriter rtpStreamWriter = new RTPStreamWriter(rtpSocketSender, grabber,
           executorService);
       PacketReceiver packetReceiver = new PacketReceiver(
           serverOptions,
-          rtpPacketDeserializer, 50);
+          rtpPacketDeserializer, 500);
       RTPStreamReader rtpStreamReader = new RTPStreamReader(videoStreamProcessor, packetReceiver,
           executorService);
 
       CanvasFrame canvas = createCanvas("Receiver");
+      ScheduledExecutorService frameDisplayScheduler = Executors.newSingleThreadScheduledExecutor();
 
       CountDownLatch latch = new CountDownLatch(1);
       canvas.addWindowListener(new WindowAdapter() {
@@ -93,6 +101,8 @@ public class RTPStream {
             grabber.close();
             rtpStreamWriter.close();
             rtpStreamReader.close();
+            scheduler.shutdown();
+            frameDisplayScheduler.shutdown();
             Thread.sleep(100);
             latch.countDown();
           } catch (Exception ex) {
@@ -101,17 +111,26 @@ public class RTPStream {
         }
       });
 
+      ConcurrentLinkedQueue<SentinelFrame> frameQueue = new ConcurrentLinkedQueue<>();
       try {
         executorService.submit(() -> {
-
           rtpStreamReader.start(socket);
           rtpStreamWriter.start(socket);
-
-          videoStreamProcessor.addSubscriber(frame -> display(frame, canvas, GRABBER_OPTIONS));
-
         });
 
         log.info("Waiting for window to close");
+
+        videoStreamProcessor.addSubscriber(f -> {
+          frameQueue.add(f);
+        });
+
+        frameDisplayScheduler.scheduleAtFixedRate(() -> {
+          SentinelFrame frameData = frameQueue.poll();
+          if (frameData == null) {
+            return;
+          }
+          display(frameData, canvas, GRABBER_OPTIONS);
+        }, 100, 33, TimeUnit.MILLISECONDS);
 
         latch.await();
 
@@ -126,6 +145,7 @@ public class RTPStream {
     CanvasFrame canvas = new CanvasFrame(name);
     canvas.setSize(RTPStream.GRABBER_OPTIONS.getImageWidth(),
         RTPStream.GRABBER_OPTIONS.getImageHeight());
+    canvas.setResizable(false);
     canvas.setDefaultCloseOperation(EXIT_ON_CLOSE);
     return canvas;
   }
@@ -145,18 +165,18 @@ public class RTPStream {
     }
   }
 
-  private static void display(byte[] frameData, CanvasFrame canvas,
+  private static void display(SentinelFrame frame, CanvasFrame canvas,
       SentinelFrameGrabberOptions options) {
-    log.debug("Displaying frame");
-    try (FFmpegFrameGrabber grabber = new FFmpegFrameGrabber(new ByteArrayInputStream(frameData))) {
-      // grabber.setFrameRate(options.getFrameRate());
+    log.debug("Displaying frame {}", frame.getTimestamp());
+    try (FFmpegFrameGrabber grabber = new FFmpegFrameGrabber(
+        new ByteArrayInputStream(frame.getData()))) {
       grabber.setImageWidth(options.getImageWidth());
       grabber.setImageHeight(options.getImageHeight());
       grabber.setPixelFormat(org.bytedeco.ffmpeg.global.avutil.AV_PIX_FMT_BGR24); // Pixel format
       grabber.start();
-      Frame frame = grabber.grabImage();
-      if (frame != null) {
-        canvas.showImage(frame);
+      Frame frameCV = grabber.grabImage();
+      if (frameCV != null) {
+        canvas.showImage(frameCV);
       } else {
         log.info("Frame is null");
       }

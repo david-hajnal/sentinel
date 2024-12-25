@@ -11,6 +11,7 @@ import space.hajnal.sentinel.codec.H264Encoder;
 import space.hajnal.sentinel.network.model.RTPPacket;
 import space.hajnal.sentinel.network.model.ServerOptions;
 import space.hajnal.sentinel.network.serialization.RTPPacketSerializer;
+import space.hajnal.sentinel.network.video.FrameProcessor;
 
 @Slf4j
 public class RTPSocketSender implements AutoCloseable {
@@ -19,12 +20,14 @@ public class RTPSocketSender implements AutoCloseable {
   private final H264Encoder h264Encoder;
   private final RTPPacketSerializer rtpPacketSerializer;
   private DatagramSocket socket;
+  private final FrameProcessor frameProcessor;
 
   public RTPSocketSender(ServerOptions serverOptions, H264Encoder h264Encoder,
-      RTPPacketSerializer rtpPacketSerializer) {
+      RTPPacketSerializer rtpPacketSerializer, FrameProcessor frameProcessor) {
     this.serverOptions = serverOptions;
     this.h264Encoder = h264Encoder;
     this.rtpPacketSerializer = rtpPacketSerializer;
+    this.frameProcessor = frameProcessor;
   }
 
   public void open(DatagramSocket socket) {
@@ -64,13 +67,16 @@ public class RTPSocketSender implements AutoCloseable {
   }
 
   private void send(RTPPacket rtpPacket) {
-    try {
-      //log.debug("Sending RTP packet with timestamp: {}", rtpPacket.getTimestamp());
-      socket.send(new DatagramPacket(rtpPacket.toBytes(), rtpPacket.toBytes().length,
-          InetAddress.getByName(serverOptions.getServerAddress()),
-          serverOptions.getServerPort()));
-    } catch (IOException e) {
-      log.error("Failed to send RTP packet", e);
+    if (socket != null && !socket.isClosed()) {
+      try {
+        frameProcessor.addSentPacket(rtpPacket);
+        //log.debug("Sending RTP packet with timestamp: {}", rtpPacket.getTimestamp());
+        socket.send(new DatagramPacket(rtpPacket.toBytes(), rtpPacket.toBytes().length,
+            InetAddress.getByName(serverOptions.getServerAddress()),
+            serverOptions.getServerPort()));
+      } catch (IOException e) {
+        log.error("Failed to send RTP packet", e);
+      }
     }
   }
 

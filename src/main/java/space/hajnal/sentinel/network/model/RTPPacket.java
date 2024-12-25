@@ -50,12 +50,13 @@ public class RTPPacket {
     timestamp = Integer.toUnsignedLong(buffer.getInt());
     ssrc = Integer.toUnsignedLong(buffer.getInt());
 
-    // Skip CSRC entries if present
-    int actualHeaderSize = BASE_HEADER_SIZE + csrcCount * 4;
+    // CSRC handling
+    int actualHeaderSize = BASE_HEADER_SIZE + (csrcCount * 4);
+    buffer.position(actualHeaderSize);
 
-    // Check for padding
+    // Handle padding
     int paddingBytes = 0;
-    if (padding) {
+    if (padding && rawData.length > actualHeaderSize) {
       paddingBytes = Byte.toUnsignedInt(rawData[rawData.length - 1]);
     }
 
@@ -66,8 +67,7 @@ public class RTPPacket {
     }
 
     payload = new byte[payloadLength];
-    buffer.position(actualHeaderSize);
-    buffer.get(payload);
+    buffer.get(payload, 0, payloadLength);
   }
 
   public static RTPPacket fromBytes(byte[] rawData) {
