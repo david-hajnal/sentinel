@@ -3,15 +3,22 @@ package space.hajnal.sentinel.network.receiver;
 import java.io.IOException;
 import java.net.DatagramPacket;
 import java.net.DatagramSocket;
+import java.util.Map;
+import java.util.SortedMap;
+import java.util.TreeMap;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.DelayQueue;
 import lombok.extern.slf4j.Slf4j;
+import org.bytedeco.javacv.CanvasFrame;
 import space.hajnal.sentinel.network.model.DelayedRTPPacket;
 import space.hajnal.sentinel.network.model.RTPPacket;
 import space.hajnal.sentinel.network.model.ServerOptions;
 import space.hajnal.sentinel.network.serialization.RTPPacketDeserializer;
+import space.hajnal.sentinel.network.video.FrameProcessor;
+import space.hajnal.sentinel.stream.RTPStream;
 
 @Slf4j
-public class PacketReceiver implements AutoCloseable {
+public class RTPSocketReceiver implements AutoCloseable {
 
   private DatagramSocket socket;
   private final DelayQueue<DelayedRTPPacket> packetQueue;
@@ -20,13 +27,14 @@ public class PacketReceiver implements AutoCloseable {
   private final RTPPacketDeserializer rtpPacketDeserializer;
   private final long packetTtlMillis;
 
-  public PacketReceiver(ServerOptions serverOptions,
+  public RTPSocketReceiver(ServerOptions serverOptions,
       RTPPacketDeserializer rtpPacketDeserializer, long packetTtlMillis) {
     this.packetQueue = new DelayQueue<>();
     this.serverOptions = serverOptions;
     this.rtpPacketDeserializer = rtpPacketDeserializer;
     this.packetTtlMillis = packetTtlMillis;
   }
+
 
   public void startReceiving(DatagramSocket socket) {
     this.socket = socket;
@@ -35,9 +43,11 @@ public class PacketReceiver implements AutoCloseable {
         byte[] buffer = new byte[serverOptions.getMtu()];
         DatagramPacket packet = new DatagramPacket(buffer, buffer.length);
         socket.receive(packet);
-        RTPPacket rtpPacket = rtpPacketDeserializer.deserialize(packet);
+       // RTPPacket rtpPacket = rtpPacketDeserializer.deserialize(packet); //seems like overkill
+        RTPPacket rtpPacket = RTPPacket.fromBytes(buffer);
         //log.info("Received packet with timestamp: {}", rtpPacket.getTimestamp());
         putPacket(rtpPacket);
+
       } catch (IOException e) {
         if (running) {
           log.error("Error while receiving packets", e);
@@ -49,6 +59,8 @@ public class PacketReceiver implements AutoCloseable {
   void putPacket(RTPPacket rtpPacket) {
     DelayedRTPPacket delayedPacket = new DelayedRTPPacket(rtpPacket, packetTtlMillis);
     packetQueue.put(delayedPacket);
+//    log.debug("Packet added to queue. Timestamp: {} Seq: {} / {}", rtpPacket.getTimestamp(),
+//        rtpPacket.getSequenceNumber(), packetQueue.size());
   }
 
   public RTPPacket retrievePacket() throws InterruptedException {

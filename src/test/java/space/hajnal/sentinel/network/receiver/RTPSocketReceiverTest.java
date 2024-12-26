@@ -13,11 +13,11 @@ import org.junit.jupiter.api.*;
 import space.hajnal.sentinel.network.serialization.RTPPacketDeserializer;
 import space.hajnal.sentinel.network.model.ServerOptions;
 
-class PacketReceiverTest {
+class RTPSocketReceiverTest {
 
   private DatagramSocket mockSocket;
   private ExecutorService threadPool;
-  private PacketReceiver packetReceiver;
+  private RTPSocketReceiver RTPSocketReceiver;
   private RTPPacketDeserializer rtpPacketDeserializer;
 
   @BeforeEach
@@ -29,12 +29,12 @@ class PacketReceiverTest {
     threadPool = Executors.newFixedThreadPool(2);
 
     rtpPacketDeserializer = mock(RTPPacketDeserializer.class);
-    packetReceiver = new PacketReceiver(serverOptions, rtpPacketDeserializer, 5000);
+    RTPSocketReceiver = new RTPSocketReceiver(serverOptions, rtpPacketDeserializer, 5000);
   }
 
   @AfterEach
   void tearDown() {
-    packetReceiver.close();
+    RTPSocketReceiver.close();
     threadPool.shutdownNow();
   }
 
@@ -82,7 +82,7 @@ class PacketReceiverTest {
 
     Future<?> future = threadPool.submit(() -> {
       try {
-        RTPPacket rtpPacket = packetReceiver.retrievePacket(); // Should block
+        RTPPacket rtpPacket = RTPSocketReceiver.retrievePacket(); // Should block
         System.out.println("Received packet: " + rtpPacket);
       } catch (InterruptedException e) {
         System.out.println("Packet retrieval was interrupted");
@@ -116,12 +116,12 @@ class PacketReceiverTest {
   }
 
   private void startReceiving(DatagramSocket socket) {
-    threadPool.submit(() -> packetReceiver.startReceiving(socket)); // Don't block with get()
+    threadPool.submit(() -> RTPSocketReceiver.startReceiving(socket)); // Don't block with get()
   }
 
   private RTPPacket getRtpPacket() {
     try {
-      return packetReceiver.retrievePacket();
+      return RTPSocketReceiver.retrievePacket();
     } catch (InterruptedException e) {
       Thread.currentThread().interrupt();
       throw new AssertionError("Packet retrieval was interrupted", e);

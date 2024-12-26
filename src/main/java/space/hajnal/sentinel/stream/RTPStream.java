@@ -33,7 +33,7 @@ import space.hajnal.sentinel.network.video.VideoStreamProcessor;
 import space.hajnal.sentinel.network.RTPStreamReader;
 import space.hajnal.sentinel.network.RTPStreamWriter;
 import space.hajnal.sentinel.network.model.ServerOptions;
-import space.hajnal.sentinel.network.receiver.PacketReceiver;
+import space.hajnal.sentinel.network.receiver.RTPSocketReceiver;
 import space.hajnal.sentinel.network.sender.RTPSocketSender;
 import space.hajnal.sentinel.network.serialization.RTPPacketDeserializer;
 import space.hajnal.sentinel.network.serialization.RTPPacketSerializer;
@@ -43,7 +43,7 @@ public class RTPStream {
 
   public static final SentinelFrameGrabberOptions GRABBER_OPTIONS = SentinelFrameGrabberOptions.builder()
       .cameraIndex(0)
-      .frameRate(1)
+      .frameRate(30)
       .imageWidth(640)
       .imageHeight(480)
       .build();
@@ -75,19 +75,20 @@ public class RTPStream {
       FrameProcessor frameProcessor = new FrameProcessor();
       VideoStreamProcessor videoStreamProcessor = new VideoStreamProcessor(frameProcessor,
           GRABBER_OPTIONS.getFrameRate(), scheduler);
-//      SentinelFrameGrabber grabber = new SentinelFrameGrabber(GRABBER_OPTIONS,
-//          frameGrabberFactory);
-      SentinelFrameGrabber grabber = new SentinelFrameGrabberStatic(GRABBER_OPTIONS);
+      SentinelFrameGrabber grabber = new SentinelFrameGrabber(GRABBER_OPTIONS,
+          frameGrabberFactory);
+//      SentinelFrameGrabber grabber = new SentinelFrameGrabberStatic(GRABBER_OPTIONS);
       RTPSocketSender rtpSocketSender = new RTPSocketSender(serverOptions,
           encoder,
           rtpPacketSerializer, frameProcessor);
-      DatagramSocket socket = new DatagramSocket(5004);
+      DatagramSocket sender = new DatagramSocket();
+      DatagramSocket receiver = new DatagramSocket(5004);
       RTPStreamWriter rtpStreamWriter = new RTPStreamWriter(rtpSocketSender, grabber,
           executorService);
-      PacketReceiver packetReceiver = new PacketReceiver(
+      RTPSocketReceiver RTPSocketReceiver = new RTPSocketReceiver(
           serverOptions,
           rtpPacketDeserializer, 500);
-      RTPStreamReader rtpStreamReader = new RTPStreamReader(videoStreamProcessor, packetReceiver,
+      RTPStreamReader rtpStreamReader = new RTPStreamReader(videoStreamProcessor, RTPSocketReceiver,
           executorService);
 
       CanvasFrame canvas = createCanvas("Receiver");
@@ -114,8 +115,8 @@ public class RTPStream {
       ConcurrentLinkedQueue<SentinelFrame> frameQueue = new ConcurrentLinkedQueue<>();
       try {
         executorService.submit(() -> {
-          rtpStreamReader.start(socket);
-          rtpStreamWriter.start(socket);
+          rtpStreamReader.start(receiver);
+          rtpStreamWriter.start(sender);
         });
 
         log.info("Waiting for window to close");
@@ -127,10 +128,11 @@ public class RTPStream {
         frameDisplayScheduler.scheduleAtFixedRate(() -> {
           SentinelFrame frameData = frameQueue.poll();
           if (frameData == null) {
+            //log.info("No frame to display");
             return;
           }
           display(frameData, canvas, GRABBER_OPTIONS);
-        }, 100, 33, TimeUnit.MILLISECONDS);
+        }, 50, (long) (1000.0 / GRABBER_OPTIONS.getFrameRate()), TimeUnit.MILLISECONDS);
 
         latch.await();
 

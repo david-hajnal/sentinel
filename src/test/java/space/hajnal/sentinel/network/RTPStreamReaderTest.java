@@ -15,22 +15,22 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import space.hajnal.sentinel.network.model.RTPPacket;
-import space.hajnal.sentinel.network.receiver.PacketReceiver;
+import space.hajnal.sentinel.network.receiver.RTPSocketReceiver;
 import space.hajnal.sentinel.network.video.VideoStreamProcessor;
 
 class RTPStreamReaderTest {
 
   private VideoStreamProcessor mockVideoStreamProcessor;
-  private PacketReceiver mockPacketReceiver;
+  private RTPSocketReceiver mockRTPSocketReceiver;
   private ExecutorService threadPool;
   private RTPStreamReader rtpStreamReader;
 
   @BeforeEach
   void setUp() {
     mockVideoStreamProcessor = mock(VideoStreamProcessor.class);
-    mockPacketReceiver = mock(PacketReceiver.class);
+    mockRTPSocketReceiver = mock(RTPSocketReceiver.class);
     threadPool = Executors.newFixedThreadPool(2);
-    rtpStreamReader = new RTPStreamReader(mockVideoStreamProcessor, mockPacketReceiver, threadPool);
+    rtpStreamReader = new RTPStreamReader(mockVideoStreamProcessor, mockRTPSocketReceiver, threadPool);
   }
 
   @AfterEach
@@ -46,7 +46,7 @@ class RTPStreamReaderTest {
     // Arrange: Mock PacketReceiver to return a valid RTPPacket
     RTPPacket mockPacket = mock(RTPPacket.class);
     DatagramSocket mockSocket = mock(DatagramSocket.class);
-    when(mockPacketReceiver.retrievePacket()).thenReturn(mockPacket);
+    when(mockRTPSocketReceiver.retrievePacket()).thenReturn(mockPacket);
 
     // Act
     rtpStreamReader.start(mockSocket);
@@ -56,8 +56,8 @@ class RTPStreamReaderTest {
     assertTrue(threadPool.awaitTermination(1, TimeUnit.SECONDS), "Thread pool did not terminate");
 
     // Assert: Verify interactions with PacketReceiver and FrameProcessor
-    verify(mockPacketReceiver, times(1)).startReceiving(mockSocket);
-    verify(mockPacketReceiver, times(1)).retrievePacket();
+    verify(mockRTPSocketReceiver, times(1)).startReceiving(mockSocket);
+    verify(mockRTPSocketReceiver, times(1)).retrievePacket();
     verify(mockVideoStreamProcessor, times(1)).processPacket(mockPacket);
   }
 
@@ -65,8 +65,8 @@ class RTPStreamReaderTest {
   void testStart_HandlePacketReceiverException() throws Exception {
     // Arrange: Mock PacketReceiver to throw an exception
     DatagramSocket mockSocket = mock(DatagramSocket.class);
-    doThrow(new RuntimeException("Receiver exception")).when(mockPacketReceiver).startReceiving(mockSocket);
-    when(mockPacketReceiver.retrievePacket()).thenReturn(mock(RTPPacket.class));
+    doThrow(new RuntimeException("Receiver exception")).when(mockRTPSocketReceiver).startReceiving(mockSocket);
+    when(mockRTPSocketReceiver.retrievePacket()).thenReturn(mock(RTPPacket.class));
 
     // Act
     rtpStreamReader.start(mockSocket);
@@ -76,7 +76,7 @@ class RTPStreamReaderTest {
     assertTrue(threadPool.awaitTermination(1, TimeUnit.SECONDS), "Thread pool did not terminate");
 
     // Assert: Ensure exception in PacketReceiver does not crash the thread
-    verify(mockPacketReceiver, times(1)).startReceiving(mockSocket);
+    verify(mockRTPSocketReceiver, times(1)).startReceiving(mockSocket);
   }
 
   @Test
@@ -84,7 +84,7 @@ class RTPStreamReaderTest {
     // Arrange: Mock PacketReceiver to return a valid RTPPacket
     DatagramSocket mockSocket = mock(DatagramSocket.class);
     RTPPacket mockPacket = mock(RTPPacket.class);
-    when(mockPacketReceiver.retrievePacket()).thenReturn(mockPacket);
+    when(mockRTPSocketReceiver.retrievePacket()).thenReturn(mockPacket);
 
     // Mock FrameProcessor to throw an exception
     doThrow(new RuntimeException("FrameProcessor exception")).when(mockVideoStreamProcessor)
@@ -98,7 +98,7 @@ class RTPStreamReaderTest {
     assertTrue(threadPool.awaitTermination(1, TimeUnit.SECONDS), "Thread pool did not terminate");
 
     // Assert: Ensure exception in FrameProcessor does not crash the thread
-    verify(mockPacketReceiver, times(1)).retrievePacket();
+    verify(mockRTPSocketReceiver, times(1)).retrievePacket();
     verify(mockVideoStreamProcessor, times(1)).processPacket(mockPacket);
   }
 

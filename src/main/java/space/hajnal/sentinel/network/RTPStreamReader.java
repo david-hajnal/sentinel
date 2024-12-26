@@ -4,20 +4,20 @@ import java.net.DatagramSocket;
 import java.util.concurrent.ExecutorService;
 import lombok.extern.slf4j.Slf4j;
 import space.hajnal.sentinel.network.model.RTPPacket;
-import space.hajnal.sentinel.network.receiver.PacketReceiver;
+import space.hajnal.sentinel.network.receiver.RTPSocketReceiver;
 import space.hajnal.sentinel.network.video.VideoStreamProcessor;
 
 @Slf4j
 public class RTPStreamReader implements AutoCloseable {
 
   private final VideoStreamProcessor videoStreamProcessor;
-  private final PacketReceiver packetReceiver;
+  private final RTPSocketReceiver RTPSocketReceiver;
   private final ExecutorService threadPool;
 
-  public RTPStreamReader(VideoStreamProcessor videoStreamProcessor, PacketReceiver packetReceiver,
+  public RTPStreamReader(VideoStreamProcessor videoStreamProcessor, RTPSocketReceiver rtpSocketReceiver,
       ExecutorService threadPool) {
     this.videoStreamProcessor = videoStreamProcessor;
-    this.packetReceiver = packetReceiver;
+    this.RTPSocketReceiver = rtpSocketReceiver;
     this.threadPool = threadPool;
   }
 
@@ -31,7 +31,7 @@ public class RTPStreamReader implements AutoCloseable {
     threadPool.submit(() -> {
       while (!Thread.currentThread().isInterrupted()) {
         try {
-          RTPPacket rtpPacket = packetReceiver.retrievePacket(); // Block until a packet is available
+          RTPPacket rtpPacket = RTPSocketReceiver.retrievePacket(); // Block until a packet is available
           //log.debug("Processing packet with timestamp: {} Seq: {}", rtpPacket.getTimestamp(), rtpPacket.getSequenceNumber());
           videoStreamProcessor.processPacket(rtpPacket);
         } catch (InterruptedException e) {
@@ -50,7 +50,7 @@ public class RTPStreamReader implements AutoCloseable {
     log.info("Starting RTPStreamReader");
     threadPool.submit(() -> {
       try {
-        packetReceiver.startReceiving(socket);
+        RTPSocketReceiver.startReceiving(socket);
       } catch (Exception e) {
         log.error("Error while receiving packets", e);
       }
@@ -59,7 +59,7 @@ public class RTPStreamReader implements AutoCloseable {
 
   @Override
   public void close() {
-    packetReceiver.close();
+    RTPSocketReceiver.close();
     threadPool.shutdown();
   }
 }

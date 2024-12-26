@@ -17,7 +17,7 @@ public class FrameProcessor {
     sentPackets.add(rtpPacket);
   }
 
-  public void compareSentAndReceivedPackets(SortedMap<Integer, byte[]> packets, long timestamp) {
+  public void compareSentAndReceivedPackets(SortedMap<Integer, RTPPacket> packets, long timestamp) {
     if (sentPackets.isEmpty()) {
       log.info("No packets to compare");
       return;
@@ -28,7 +28,7 @@ public class FrameProcessor {
         .filter(p -> p.getTimestamp() == timestamp && packets.containsKey(p.getSequenceNumber()))
         .forEach(p -> {
           byte[] sentPayload = p.getPayload();
-          byte[] receivedPayload = packets.get(p.getSequenceNumber());
+          byte[] receivedPayload = packets.get(p.getSequenceNumber()).getPayload();
           if (sentPayload.length != receivedPayload.length) {
             log.warn("Payload length mismatch for seq: {} (sent: {}, received: {})",
                 p.getSequenceNumber(),
@@ -43,18 +43,28 @@ public class FrameProcessor {
     log.info("Missing packets: {}", missingPackets);
   }
 
-  public byte[] reassembleFrame(SortedMap<Integer, byte[]> packets) {
-    int totalLength = packets.values().stream().mapToInt(p -> p.length).sum();
+  public byte[] reassembleFrame(SortedMap<Integer, RTPPacket> packets) {
+    if (packets == null || packets.isEmpty()) {
+      return new byte[0];
+    }
+
+    int totalLength = packets.values().stream()
+        .mapToInt(packet -> packet.getPayload().length)
+        .sum();
+
     byte[] completeFrame = new byte[totalLength];
     AtomicInteger offset = new AtomicInteger(0);
 
-    packets.keySet().forEach(seq -> {
-      byte[] payload = packets.get(seq);
-      System.arraycopy(payload, 0, completeFrame, offset.get(), payload.length);
-      offset.addAndGet(payload.length);
-    });
+    packets.keySet()
+        .stream()
+        .sorted() //
+        .forEach(seq -> {
+          RTPPacket packet = packets.get(seq);
+          byte[] fullPacket = packet.getPayload();
+          System.arraycopy(fullPacket, 0, completeFrame, offset.get(), fullPacket.length);
+          offset.addAndGet(fullPacket.length);
+        });
 
-    //log.debug("Reassembled frame size: {}", completeFrame.length);
     return completeFrame;
   }
 

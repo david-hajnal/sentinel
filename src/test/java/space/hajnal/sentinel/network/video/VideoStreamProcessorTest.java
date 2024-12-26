@@ -34,9 +34,9 @@ class VideoStreamProcessorTest {
     videoStreamProcessor.processPacket(rtpPacket);
 
     // Assert
-    SortedMap<Integer, byte[]> buffer = videoStreamProcessor.getFramesByTimestamp(1000L);
+    SortedMap<Integer, RTPPacket> buffer = videoStreamProcessor.getFramesByTimestamp(1000L);
     assertNotNull(buffer, "Frame buffer for timestamp 1000 should exist");
-    assertArrayEquals(new byte[]{0x01, 0x02}, buffer.get(1), "Payload mismatch");
+    assertArrayEquals(new byte[]{0x01, 0x02}, buffer.get(1).toBytes(), "Payload mismatch");
   }
 
   @Test

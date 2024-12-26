@@ -12,6 +12,7 @@ import space.hajnal.sentinel.network.model.RTPPacket;
 import space.hajnal.sentinel.network.model.ServerOptions;
 import space.hajnal.sentinel.network.serialization.RTPPacketSerializer;
 import space.hajnal.sentinel.network.video.FrameProcessor;
+import space.hajnal.sentinel.stream.RTPStream;
 
 @Slf4j
 public class RTPSocketSender implements AutoCloseable {
@@ -58,7 +59,7 @@ public class RTPSocketSender implements AutoCloseable {
       byte[] frameData = h264Encoder.encode(frame);
       int mtu = serverOptions.getMtu();
       List<RTPPacket> rtpPackets = rtpPacketSerializer.serialize(frameData, mtu, timestamp, ssrc);
-      log.debug("Sending frame with timestamp: {}, size: {}", timestamp, rtpPackets.size());
+      //log.debug("Sending frame with timestamp: {}, size: {}", timestamp, rtpPackets.size());
       rtpPackets.forEach(this::send);
 
     } catch (Exception e) {

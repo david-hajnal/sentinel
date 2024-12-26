@@ -10,6 +10,7 @@ import java.awt.image.BufferedImage;
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.File;
+import java.net.DatagramPacket;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
@@ -24,6 +25,7 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import space.hajnal.sentinel.network.model.RTPPacket;
+import space.hajnal.sentinel.network.serialization.RTPPacketDeserializer;
 import space.hajnal.sentinel.network.serialization.RTPPacketSerializer;
 
 class VideoStreamProcessorIntegrationTest {
@@ -70,9 +72,13 @@ class VideoStreamProcessorIntegrationTest {
     List<RTPPacket> rtpPacketList = rtpPacketSerializer.serialize(imageBytes, 1400, 1234L, 123);
     Collections.shuffle(rtpPacketList); // Randomize packet order
     SortedMap<Integer, RTPPacket> packets = new TreeMap<>();
+    RTPPacketDeserializer rtpPacketDeserializer = new RTPPacketDeserializer();
+
     for (RTPPacket rtpPacket : rtpPacketList) {
-      System.out.println("Packet: " + rtpPacket.getSequenceNumber());
-      packets.put(rtpPacket.getSequenceNumber(), rtpPacket);
+      DatagramPacket datagramPacket = new DatagramPacket(rtpPacket.toBytes(), rtpPacket.toBytes().length);
+      RTPPacket deserialized = rtpPacketDeserializer.deserialize(datagramPacket);
+      System.out.println("Packet: " + deserialized.getSequenceNumber());
+      packets.put(rtpPacket.getSequenceNumber(), deserialized);
     }
 
     // Add a subscriber to capture the final frame
