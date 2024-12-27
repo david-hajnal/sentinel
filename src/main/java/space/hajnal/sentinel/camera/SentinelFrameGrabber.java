@@ -1,13 +1,10 @@
 package space.hajnal.sentinel.camera;
 
-import static space.hajnal.sentinel.stream.RTPStream.createCanvas;
-
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
 import lombok.extern.slf4j.Slf4j;
-import org.bytedeco.javacv.CanvasFrame;
 import org.bytedeco.javacv.Frame;
 import org.bytedeco.javacv.FrameGrabber;
 
@@ -15,10 +12,9 @@ import org.bytedeco.javacv.FrameGrabber;
 public class SentinelFrameGrabber implements AutoCloseable {
 
   private final SentinelFrameGrabberOptions options;
-  private boolean running = false;
   private final ScheduledExecutorService scheduler;
   private final FrameGrabberFactory frameGrabberFactory;
-
+  private boolean running = false;
   private FrameGrabber grabber;
 
   public SentinelFrameGrabber(SentinelFrameGrabberOptions options,
@@ -55,7 +51,7 @@ public class SentinelFrameGrabber implements AutoCloseable {
       long frameDurationMillis = 1000 / options.getFrameRate();
       AtomicLong timestamp = new AtomicLong(0);
 
-      CanvasFrame canvas = createCanvas("Source");
+      // CanvasFrame canvas = createCanvas("Source");
 
       scheduler.scheduleAtFixedRate(() -> {
         if (!running) {
@@ -67,7 +63,7 @@ public class SentinelFrameGrabber implements AutoCloseable {
           if (frame == null) {
             log.info("No more frames to grab.");
           } else {
-            canvas.showImage(frame);
+            //canvas.showImage(frame);
             fn.onFrameGrabbed(frame, timestamp.addAndGet(90000 / options.getFrameRate()));
           }
         } catch (Exception e) {

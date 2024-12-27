@@ -1,23 +1,28 @@
 package space.hajnal.sentinel.network;
 
+import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.Mockito.any;
+import static org.mockito.Mockito.anyLong;
+import static org.mockito.Mockito.atLeast;
+import static org.mockito.Mockito.doAnswer;
+import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.eq;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
+
 import java.net.DatagramSocket;
 import java.util.concurrent.CountDownLatch;
-import org.bytedeco.javacv.Frame;
-import org.bytedeco.javacv.FrameGrabber;
-import org.junit.jupiter.api.AfterEach;
-import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Test;
-import org.mockito.ArgumentCaptor;
-import space.hajnal.sentinel.camera.FrameGrabberCallback;
-import space.hajnal.sentinel.camera.SentinelFrameGrabber;
-import space.hajnal.sentinel.network.sender.RTPSocketSender;
-
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
-
-import static org.junit.jupiter.api.Assertions.assertTrue;
-import static org.mockito.Mockito.*;
+import org.bytedeco.javacv.Frame;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import space.hajnal.sentinel.camera.SentinelFrameGrabber;
+import space.hajnal.sentinel.network.sender.RTPSocketSender;
 
 class RTPStreamWriterTest {
 
@@ -76,7 +81,7 @@ class RTPStreamWriterTest {
 
     // Assert: Verify that an exception is logged and no frames are sent
     verify(mockFrameGrabber, times(1)).capture(any());
-    verifyNoInteractions(mockSender);
+    verify(mockSender, never()).send(any(), anyLong());
   }
 
   @Test

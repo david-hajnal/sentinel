@@ -7,8 +7,9 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.net.DatagramPacket;
-import space.hajnal.sentinel.network.model.RTPPacket;
+import java.nio.ByteBuffer;
 import org.junit.jupiter.api.Test;
+import space.hajnal.sentinel.network.model.RTPPacket;
 import space.hajnal.sentinel.network.serialization.RTPPacketDeserializer;
 
 class RTPPacketDeserializerTest {
@@ -86,15 +87,40 @@ class RTPPacketDeserializerTest {
     byte[] packetBytes = originalPacket.toBytes();
 
     // Truncate the payload in the DatagramPacket
-    DatagramPacket datagramPacket = new DatagramPacket(packetBytes, packetBytes.length - 5);
-
     RTPPacketDeserializer deserializer = new RTPPacketDeserializer();
 
     // Act & Assert: Validate deserialization with truncated payload
     IllegalArgumentException exception = assertThrows(IllegalArgumentException.class,
-        () -> deserializer.deserialize(datagramPacket));
+        () -> deserializer.deserialize(payload));
     System.out.println(exception.getMessage());
     assertTrue(exception.getMessage().contains("Invalid RTP packet: insufficient data for header."),
         "Expected error message for negative payload length");
+  }
+
+  @Test
+  void test() {
+    ByteBuffer buffer = ByteBuffer.allocate(1400);
+
+    buffer.put(Integer.valueOf(2).byteValue());
+    buffer.put(Integer.valueOf(96).byteValue());
+    buffer.put(Integer.valueOf(1).byteValue());
+    buffer.put(Integer.valueOf(1).byteValue());
+    buffer.put(Integer.valueOf(1).byteValue());
+    buffer.put(Integer.valueOf(1).byteValue());
+    buffer.put(Integer.valueOf(1).byteValue());
+    buffer.put(Integer.valueOf(1).byteValue());
+    buffer.put(Integer.valueOf(1).byteValue());
+
+    RTPPacketDeserializer deserializer = new RTPPacketDeserializer();
+
+    RTPPacket deserialize = deserializer.deserialize(buffer.array());
+
+    System.out.println(deserialize);
+    RTPPacket rtpPacket = new RTPPacket(buffer.array());
+
+    System.out.println(rtpPacket);
+
+    assertEquals(rtpPacket, deserialize);
+
   }
 }

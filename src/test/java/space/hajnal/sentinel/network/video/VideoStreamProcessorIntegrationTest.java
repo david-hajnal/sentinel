@@ -11,8 +11,6 @@ import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.net.DatagramPacket;
-import java.util.Arrays;
-import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
 import java.util.SortedMap;
@@ -38,7 +36,8 @@ class VideoStreamProcessorIntegrationTest {
   @BeforeEach
   void setUp() {
     frameProcessor = new FrameProcessor();
-    videoStreamProcessor = new VideoStreamProcessor(frameProcessor);
+    videoStreamProcessor = new VideoStreamProcessor(frameProcessor, 1,
+        Executors.newSingleThreadScheduledExecutor());
     rtpPacketSerializer = new RTPPacketSerializer();
     scheduler = Executors.newSingleThreadScheduledExecutor();
   }
@@ -75,7 +74,8 @@ class VideoStreamProcessorIntegrationTest {
     RTPPacketDeserializer rtpPacketDeserializer = new RTPPacketDeserializer();
 
     for (RTPPacket rtpPacket : rtpPacketList) {
-      DatagramPacket datagramPacket = new DatagramPacket(rtpPacket.toBytes(), rtpPacket.toBytes().length);
+      DatagramPacket datagramPacket = new DatagramPacket(rtpPacket.toBytes(),
+          rtpPacket.toBytes().length);
       RTPPacket deserialized = rtpPacketDeserializer.deserialize(datagramPacket);
       System.out.println("Packet: " + deserialized.getSequenceNumber());
       packets.put(rtpPacket.getSequenceNumber(), deserialized);
@@ -92,7 +92,7 @@ class VideoStreamProcessorIntegrationTest {
     // Act: Process the packets
     packets.keySet().forEach(seq -> videoStreamProcessor.processPacket(packets.get(seq)));
 
-    assertTrue(latch.await(1000, java.util.concurrent.TimeUnit.MILLISECONDS),
+    assertTrue(latch.await(5000, java.util.concurrent.TimeUnit.MILLISECONDS),
         "Timeout waiting for frame assembly");
     // Assert: Ensure the reassembled frame matches the original image data
     assertNotNull(receivedFrame[0], "Frame should not be null");

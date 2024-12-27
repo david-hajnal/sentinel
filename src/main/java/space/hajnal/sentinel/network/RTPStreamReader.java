@@ -14,7 +14,8 @@ public class RTPStreamReader implements AutoCloseable {
   private final RTPSocketReceiver RTPSocketReceiver;
   private final ExecutorService threadPool;
 
-  public RTPStreamReader(VideoStreamProcessor videoStreamProcessor, RTPSocketReceiver rtpSocketReceiver,
+  public RTPStreamReader(VideoStreamProcessor videoStreamProcessor,
+      RTPSocketReceiver rtpSocketReceiver,
       ExecutorService threadPool) {
     this.videoStreamProcessor = videoStreamProcessor;
     this.RTPSocketReceiver = rtpSocketReceiver;
@@ -39,7 +40,7 @@ public class RTPStreamReader implements AutoCloseable {
           Thread.currentThread().interrupt();
           break;
         } catch (Exception e) {
-          log.error("Error while processing packets", e);
+          log.error("Error while processing packets: {}", e.getMessage(), e);
         }
       }
     });

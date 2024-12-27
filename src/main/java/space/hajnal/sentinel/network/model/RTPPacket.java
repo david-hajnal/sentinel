@@ -1,9 +1,15 @@
 package space.hajnal.sentinel.network.model;
 
 import java.nio.ByteBuffer;
+import lombok.AllArgsConstructor;
+import lombok.EqualsAndHashCode;
 import lombok.Getter;
+import lombok.ToString;
 
 @Getter
+@AllArgsConstructor
+@ToString
+@EqualsAndHashCode
 public class RTPPacket {
 
   public static final int BASE_HEADER_SIZE = 12;
@@ -32,7 +38,7 @@ public class RTPPacket {
     this.header = constructHeader();
   }
 
-  // Deserialize from raw bytes
+  @Deprecated
   public RTPPacket(byte[] rawData) {
     if (rawData.length < BASE_HEADER_SIZE) {
       throw new IllegalArgumentException("Invalid RTP packet: insufficient data for header.");
@@ -62,10 +68,6 @@ public class RTPPacket {
     int payloadLength = rawData.length - BASE_HEADER_SIZE;
     payload = new byte[payloadLength];
     buffer.get(payload);
-  }
-
-  public static RTPPacket fromBytes(byte[] packetData) {
-    return new RTPPacket(packetData);
   }
 
   // Build header during construction

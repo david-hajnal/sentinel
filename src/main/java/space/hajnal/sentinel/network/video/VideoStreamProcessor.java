@@ -6,7 +6,6 @@ import java.util.SortedMap;
 import java.util.TreeMap;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
-import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
@@ -18,6 +17,7 @@ import space.hajnal.sentinel.network.model.RTPPacket;
 @Slf4j
 public class VideoStreamProcessor {
 
+  private static final double JITTER_ALPHA = 0.125;  // Jitter smoothing factor
   private final Map<Long, SortedMap<Integer, RTPPacket>> frameBufferByTimestamp = new ConcurrentHashMap<>();
   private final Map<Long, Long> lastArrivalTimeByTimestamp = new ConcurrentHashMap<>();
   private final List<FrameListener> subscribers = new CopyOnWriteArrayList<>();
@@ -25,8 +25,8 @@ public class VideoStreamProcessor {
   private final ScheduledExecutorService scheduler;
   private final double frameIntervalMillis;  // Interval for frame assembly (e.g., 33.3ms for 30 fps)
   private final AtomicReference<Double> jitter = new AtomicReference<>(0.0);
-  private static final double JITTER_ALPHA = 0.125;  // Jitter smoothing factor
-  private AtomicLong lastAssembledTimestamp = new AtomicLong(-1); // Track last assembled timestamp
+  private final AtomicLong lastAssembledTimestamp = new AtomicLong(
+      -1); // Track last assembled timestamp
 
   public VideoStreamProcessor(FrameProcessor frameProcessor, int fps,
       ScheduledExecutorService scheduler) {
@@ -53,7 +53,8 @@ public class VideoStreamProcessor {
         .orElse(lastAssembledTimestamp.get());
 
     long jitterCompensation = Math.round(jitter.get());
-    long adjustedDelay = (long) Math.max(frameIntervalMillis, frameIntervalMillis + jitterCompensation);
+    long adjustedDelay = (long) Math.max(frameIntervalMillis,
+        frameIntervalMillis + jitterCompensation);
 
     log.debug("Scheduling frame assembly for timestamp: {} with adjusted delay: {} ms",
         nextTimestamp, adjustedDelay);
@@ -135,7 +136,7 @@ public class VideoStreamProcessor {
     int sequenceNumber = rtpPacket.getSequenceNumber();
     long arrivalTime = System.currentTimeMillis();
 
-    // log.debug("Received packet: Timestamp={} Seq={}", timestamp, sequenceNumber);
+    log.debug("Received packet: Timestamp={} Seq={}", timestamp, sequenceNumber);
 
     scheduler.schedule(() -> calculateJitter(timestamp, arrivalTime), 0, TimeUnit.MILLISECONDS);
 

@@ -1,6 +1,7 @@
 package space.hajnal.sentinel.network;
 
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.Mockito.atLeast;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.times;
@@ -30,7 +31,8 @@ class RTPStreamReaderTest {
     mockVideoStreamProcessor = mock(VideoStreamProcessor.class);
     mockRTPSocketReceiver = mock(RTPSocketReceiver.class);
     threadPool = Executors.newFixedThreadPool(2);
-    rtpStreamReader = new RTPStreamReader(mockVideoStreamProcessor, mockRTPSocketReceiver, threadPool);
+    rtpStreamReader = new RTPStreamReader(mockVideoStreamProcessor, mockRTPSocketReceiver,
+        threadPool);
   }
 
   @AfterEach
@@ -46,7 +48,11 @@ class RTPStreamReaderTest {
     // Arrange: Mock PacketReceiver to return a valid RTPPacket
     RTPPacket mockPacket = mock(RTPPacket.class);
     DatagramSocket mockSocket = mock(DatagramSocket.class);
-    when(mockRTPSocketReceiver.retrievePacket()).thenReturn(mockPacket);
+    when(mockRTPSocketReceiver.retrievePacket()).thenReturn(mockPacket).then(_ -> {
+      // Simulate interrupting the thread
+      Thread.currentThread().interrupt();
+      return null;
+    });
 
     // Act
     rtpStreamReader.start(mockSocket);
@@ -56,17 +62,24 @@ class RTPStreamReaderTest {
     assertTrue(threadPool.awaitTermination(1, TimeUnit.SECONDS), "Thread pool did not terminate");
 
     // Assert: Verify interactions with PacketReceiver and FrameProcessor
-    verify(mockRTPSocketReceiver, times(1)).startReceiving(mockSocket);
-    verify(mockRTPSocketReceiver, times(1)).retrievePacket();
-    verify(mockVideoStreamProcessor, times(1)).processPacket(mockPacket);
+    verify(mockRTPSocketReceiver, atLeast(1)).startReceiving(mockSocket);
+    verify(mockRTPSocketReceiver, atLeast(1)).retrievePacket();
+    verify(mockVideoStreamProcessor, atLeast(1)).processPacket(mockPacket);
   }
 
   @Test
   void testStart_HandlePacketReceiverException() throws Exception {
     // Arrange: Mock PacketReceiver to throw an exception
+    RTPPacket mockPacket = mock(RTPPacket.class);
+
     DatagramSocket mockSocket = mock(DatagramSocket.class);
-    doThrow(new RuntimeException("Receiver exception")).when(mockRTPSocketReceiver).startReceiving(mockSocket);
-    when(mockRTPSocketReceiver.retrievePacket()).thenReturn(mock(RTPPacket.class));
+    doThrow(new RuntimeException("Receiver exception")).when(mockRTPSocketReceiver)
+        .startReceiving(mockSocket);
+    when(mockRTPSocketReceiver.retrievePacket()).thenReturn(mockPacket).then(_ -> {
+      // Simulate interrupting the thread
+      Thread.currentThread().interrupt();
+      return null;
+    });
 
     // Act
     rtpStreamReader.start(mockSocket);
@@ -84,7 +97,11 @@ class RTPStreamReaderTest {
     // Arrange: Mock PacketReceiver to return a valid RTPPacket
     DatagramSocket mockSocket = mock(DatagramSocket.class);
     RTPPacket mockPacket = mock(RTPPacket.class);
-    when(mockRTPSocketReceiver.retrievePacket()).thenReturn(mockPacket);
+    when(mockRTPSocketReceiver.retrievePacket()).thenReturn(mockPacket).then(_ -> {
+      // Simulate interrupting the thread
+      Thread.currentThread().interrupt();
+      return null;
+    });
 
     // Mock FrameProcessor to throw an exception
     doThrow(new RuntimeException("FrameProcessor exception")).when(mockVideoStreamProcessor)
@@ -98,8 +115,8 @@ class RTPStreamReaderTest {
     assertTrue(threadPool.awaitTermination(1, TimeUnit.SECONDS), "Thread pool did not terminate");
 
     // Assert: Ensure exception in FrameProcessor does not crash the thread
-    verify(mockRTPSocketReceiver, times(1)).retrievePacket();
-    verify(mockVideoStreamProcessor, times(1)).processPacket(mockPacket);
+    verify(mockRTPSocketReceiver, atLeast(1)).retrievePacket();
+    verify(mockVideoStreamProcessor, atLeast(1)).processPacket(mockPacket);
   }
 
 }

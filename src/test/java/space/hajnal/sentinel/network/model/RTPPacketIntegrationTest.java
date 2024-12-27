@@ -1,38 +1,46 @@
 package space.hajnal.sentinel.network.model;
 
-import java.net.DatagramPacket;
-import java.net.DatagramSocket;
-import java.net.InetAddress;
-import java.util.Collection;
-import java.util.Collections;
-import java.util.SortedMap;
-import java.util.TreeMap;
-import org.bytedeco.javacv.CanvasFrame;
-import org.bytedeco.javacv.Frame;
-import org.bytedeco.javacv.OpenCVFrameConverter;
-import org.bytedeco.opencv.opencv_core.Mat;
-import org.bytedeco.opencv.global.opencv_imgcodecs;
-import org.junit.jupiter.api.Test;
+import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 
 import java.io.File;
 import java.io.IOException;
+import java.net.DatagramPacket;
+import java.net.DatagramSocket;
+import java.net.InetAddress;
 import java.nio.file.Files;
-import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
+import java.util.SortedMap;
+import java.util.TreeMap;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.Timeout;
 import space.hajnal.sentinel.network.serialization.RTPPacketDeserializer;
 import space.hajnal.sentinel.network.serialization.RTPPacketSerializer;
 import space.hajnal.sentinel.network.video.FrameProcessor;
-import space.hajnal.sentinel.stream.RTPStream;
-
-import static org.junit.jupiter.api.Assertions.assertArrayEquals;
-import static org.junit.jupiter.api.Assertions.assertEquals;
 
 class RTPPacketIntegrationTest {
 
   private static final int MTU_SIZE = 1400;  // Simulate safe RTP payload size
+  private DatagramSocket sender;
+  private DatagramSocket receiver;
+
+  @BeforeEach
+  void setUp() throws IOException {
+    sender = new DatagramSocket();
+    receiver = new DatagramSocket(12345);
+  }
+
+  @AfterEach
+  void tearDown() {
+    sender.close();
+    receiver.close();
+  }
 
   @Test
-  void testRTPPacketEncodingAndDecoding() throws IOException, InterruptedException {
+  @Timeout(5)
+  void testRTPPacketEncodingAndDecoding() throws IOException {
     FrameProcessor frameProcessor = new FrameProcessor();
     RTPPacketSerializer rtpPacketSerializer = new RTPPacketSerializer();
     RTPPacketDeserializer rtpPacketDeserializer = new RTPPacketDeserializer();
@@ -46,9 +54,6 @@ class RTPPacketIntegrationTest {
     Collections.shuffle(serialized);  // Simulate out-of-order packets
     SortedMap<Integer, RTPPacket> deserializedPackets = new TreeMap<>();
 
-    DatagramSocket sender = new DatagramSocket();
-    DatagramSocket receiver = new DatagramSocket(12345);
-
     for (RTPPacket packet : serialized) {
       sender.send(
           new DatagramPacket(packet.toBytes(), packet.toBytes().length, InetAddress.getLocalHost(),
@@ -57,14 +62,12 @@ class RTPPacketIntegrationTest {
       byte[] buffer = new byte[MTU_SIZE];
       DatagramPacket datagramPacket = new DatagramPacket(buffer, buffer.length);
       receiver.receive(datagramPacket);
-      RTPPacket deserialize = rtpPacketDeserializer.deserialize(datagramPacket);
-      deserializedPackets.put(packet.getSequenceNumber(), deserialize);
-    }
+      int receivedLength = datagramPacket.getLength();
+      byte[] receivedBytes = new byte[receivedLength];
+      System.arraycopy(datagramPacket.getData(), 0, receivedBytes, 0, receivedLength);
+      deserializedPackets.put(packet.getSequenceNumber(),
+          rtpPacketDeserializer.deserialize(receivedBytes));
 
-    for (RTPPacket original : serialized) {
-      RTPPacket received = deserializedPackets.get(original.getSequenceNumber());
-      System.out.println("Original size: " + original.getPayload().length + " Deserialized size: "
-          + received.getPayload().length);
     }
 
     // Step 3: Reassemble the image
@@ -72,16 +75,7 @@ class RTPPacketIntegrationTest {
 
     System.out.println("Reconstructed Image Size: " + reconstructedImage.length);
 
-//    Frame reconstructed = RTPStream.fromBytes(reconstructedImage, 1920, 1080);
-//    Frame original = RTPStream.fromBytes(imageBytes, 1920, 1080);
-//
-//    RTPStream.createCanvas("Reconstructed Image").showImage(reconstructed);
-//    RTPStream.createCanvas("Original Image").showImage(original);
-//    Thread.sleep(12000);
-
     // Step 4: Validate the reconstructed image against the original
-    assertEquals(imageBytes.length, reconstructedImage.length,
-        "Reconstructed image size does not match original.");
     assertArrayEquals(imageBytes, reconstructedImage,
         "Reconstructed image does not match original.");
   }
@@ -95,50 +89,14 @@ class RTPPacketIntegrationTest {
     RTPPacketSerializer rtpPacketSerializer = new RTPPacketSerializer();
     List<RTPPacket> serialize = rtpPacketSerializer.serialize(imageBytes, MTU_SIZE, 1, 12345);
 
+    RTPPacketDeserializer rtpPacketDeserializer = new RTPPacketDeserializer();
     // Step 3: Reassemble the image
     for (RTPPacket packet : serialize) {
       byte[] packetBytes = packet.toBytes();
-      RTPPacket rtpPacket = RTPPacket.fromBytes(packetBytes);
+      RTPPacket rtpPacket = rtpPacketDeserializer.deserialize(packetBytes);
       assertArrayEquals(packetBytes, rtpPacket.toBytes(),
           "Reconstructed image does not match original. Packet: " + packet.getSequenceNumber());
     }
   }
 
-
-  private List<RTPPacket> fragmentToRTPPackets(byte[] data) {
-    List<RTPPacket> packets = new ArrayList<>();
-    int offset = 0;
-    int sequenceNumber = 0;
-    long ssrc = 12345L;
-    long timestamp = System.currentTimeMillis();
-
-    while (offset < data.length) {
-      int remaining = data.length - offset;
-      int payloadSize = Math.min(remaining, MTU_SIZE);  // Fragment payload
-      byte[] payload = new byte[payloadSize];
-
-      System.arraycopy(data, offset, payload, 0, payloadSize);
-
-      boolean isLast = (offset + payloadSize) >= data.length;
-      RTPPacket packet = new RTPPacket(96, sequenceNumber++, timestamp, ssrc, payload, isLast);
-      packets.add(packet);
-
-      offset += payloadSize;
-    }
-    System.out.println("Generated " + packets.size() + " RTP packets.");
-    return packets;
-  }
-
-  private byte[] reassembleImage(List<byte[]> payloads) {
-    int totalSize = payloads.stream().mapToInt(p -> p.length).sum();
-    byte[] reconstructed = new byte[totalSize];
-    int offset = 0;
-
-    for (byte[] payload : payloads) {
-      System.arraycopy(payload, 0, reconstructed, offset, payload.length);
-      offset += payload.length;
-    }
-    System.out.println("Reassembled Image Size: " + reconstructed.length);
-    return reconstructed;
-  }
 }

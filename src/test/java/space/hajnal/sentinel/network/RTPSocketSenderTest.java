@@ -18,14 +18,16 @@ import java.net.DatagramPacket;
 import java.net.DatagramSocket;
 import java.util.List;
 import org.bytedeco.javacv.Frame;
-import space.hajnal.sentinel.network.model.RTPPacket;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 import space.hajnal.sentinel.codec.H264Encoder;
+import space.hajnal.sentinel.network.model.RTPPacket;
 import space.hajnal.sentinel.network.model.ServerOptions;
 import space.hajnal.sentinel.network.sender.RTPSocketSender;
+import space.hajnal.sentinel.network.serialization.RTPPacketDeserializer;
 import space.hajnal.sentinel.network.serialization.RTPPacketSerializer;
+import space.hajnal.sentinel.network.video.FrameProcessor;
 
 class RTPSocketSenderTest {
 
@@ -35,6 +37,7 @@ class RTPSocketSenderTest {
   private RTPSocketSender rtpSocketSender;
   private RTPPacketSerializer rtpPacketSerializer;
   private Frame frame;
+  private FrameProcessor frameProcessor;
 
   @BeforeEach
   void setUp() {
@@ -45,6 +48,7 @@ class RTPSocketSenderTest {
     h264Encoder = mock(H264Encoder.class);
     rtpPacketSerializer = mock(RTPPacketSerializer.class);
     frame = mock(Frame.class);
+    frameProcessor = mock(FrameProcessor.class);
 
     when(serverOptions.getMtu()).thenReturn(mtu); // Example MTU
     when(serverOptions.getServerAddress()).thenReturn("127.0.0.1");
@@ -55,7 +59,8 @@ class RTPSocketSenderTest {
     mockSocket = mock(DatagramSocket.class);
 
     // Use a spy to inject the mock socket into the RTPStream class
-    rtpSocketSender = spy(new RTPSocketSender(serverOptions, h264Encoder, rtpPacketSerializer, null));
+    rtpSocketSender = spy(
+        new RTPSocketSender(serverOptions, h264Encoder, rtpPacketSerializer, frameProcessor));
     doReturn(true).when(mockSocket).isClosed();
   }
 
@@ -104,13 +109,13 @@ class RTPSocketSenderTest {
     verify(mockSocket, atLeastOnce()).send(packetCaptor.capture());
     verify(h264Encoder, times(1)).encode(frame);
     verify(rtpPacketSerializer, times(1)).serialize(encodedFrame, 1400, timestamp, 123456);
-    verify(mockSocket).isClosed();
+    verify(mockSocket, atLeastOnce()).isClosed();
     verify(mockSocket).setSendBufferSize(65536);
-
+    RTPPacketDeserializer deserializer = new RTPPacketDeserializer();
     // Check the captured packets
     for (DatagramPacket packet : packetCaptor.getAllValues()) {
       byte[] data = packet.getData();
-      RTPPacket rtpPacket = RTPPacket.fromBytes(data);
+      RTPPacket rtpPacket = deserializer.deserialize(data);
 
       assertEquals(96, rtpPacket.getPayloadType(), "Payload type should be 96 (dynamic H.264).");
       assertEquals(timestamp, rtpPacket.getTimestamp(),
