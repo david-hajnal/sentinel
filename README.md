@@ -1,3 +1,20 @@
+# RTP Protocol for Java
+
+Send and receive RTP packets in Java.
+Currently focusing on video streaming only.
+
+* Grab image with JavaCV
+* Send image with RTP
+* Receive image with RTP
+* Display image with JavaCV
+----
+* Todo auth
+* Todo control
+
+# Setup 
+
+## JavaCV
+
 for mac os arm64 libOrbbecSDK needs to be linked manually
 https://github.com/orbbec/OrbbecSDK
 
